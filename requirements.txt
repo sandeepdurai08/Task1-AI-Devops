@@ -1,0 +1,10 @@
+# Jenkins Chatbot Dependencies
+requests>=2.31.0
+python-jenkins>=1.8.0
+python-dotenv>=1.0.0
+rich>=13.7.0  # For terminal output (CLI mode)
+
+# Google Chat Integration (with Auth)
+flask>=3.0.0
+gunicorn>=21.0.0  # Production WSGI server
+google-auth>=2.25.0  # Verify requests from Google Chat
