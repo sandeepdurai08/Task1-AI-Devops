@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    environment {
+        // Path to dotnet CLI - adjust if dotnet is not on system PATH in Jenkins
+        DOTNET = 'dotnet'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Restore') {
+            steps {
+                dir('projects/csharp-dll-project') {
+                    bat '%DOTNET% restore MathLibrary.sln'
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('projects/csharp-dll-project') {
+                    bat '%DOTNET% build MathLibrary.sln --configuration Release --no-restore'
+                }
+            }
+        }
+
+        stage('Verify DLL') {
+            steps {
+                dir('projects/csharp-dll-project') {
+                    bat 'dir MathLibrary\\bin\\Release\\net6.0\\*.dll'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'C# DLL build succeeded!'
+            archiveArtifacts artifacts: 'projects/csharp-dll-project/MathLibrary/bin/Release/net6.0/*.dll',
+                             fingerprint: true
+        }
+        failure {
+            echo 'C# DLL build failed.'
+        }
+    }
+}

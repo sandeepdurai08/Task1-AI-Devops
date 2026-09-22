@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+
+    tools {
+        // Make sure "Maven 3" is configured in Jenkins → Global Tool Configuration
+        maven 'Maven 3'
+        jdk   'JDK 11'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('projects/maven-jar-project') {
+                    bat 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Verify JAR') {
+            steps {
+                dir('projects/maven-jar-project') {
+                    bat 'dir target\\*.jar'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Maven JAR build succeeded!'
+            archiveArtifacts artifacts: 'projects/maven-jar-project/target/*.jar', fingerprint: true
+        }
+        failure {
+            echo 'Maven JAR build failed.'
+        }
+    }
+}

@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        DOTNET = 'dotnet'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Restore') {
+            steps {
+                dir('projects/dotnet-console-app') {
+                    bat '%DOTNET% restore HelloApp.sln'
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('projects/dotnet-console-app') {
+                    bat '%DOTNET% build HelloApp.sln --configuration Release --no-restore'
+                }
+            }
+        }
+
+        stage('Run App') {
+            steps {
+                dir('projects/dotnet-console-app') {
+                    bat '%DOTNET% run --project HelloApp\\HelloApp.csproj --configuration Release'
+                }
+            }
+        }
+
+        stage('Publish') {
+            steps {
+                dir('projects/dotnet-console-app') {
+                    bat '%DOTNET% publish HelloApp\\HelloApp.csproj --configuration Release --output publish\\'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '.NET Console App build succeeded!'
+            archiveArtifacts artifacts: 'projects/dotnet-console-app/publish/**/*',
+                             fingerprint: true
+        }
+        failure {
+            echo '.NET Console App build failed.'
+        }
+    }
+}
