@@ -205,10 +205,10 @@ Open your browser and go to: **http://localhost:8080**
 
   To find your Java path:
   ```powershell
-  (Get-Command java).Source
-  # e.g. C:\Program Files\Java\jdk-21\bin\java.exe
-  # JAVA_HOME = C:\Program Files\Java\jdk-21
+  (Get-Command java).Source -replace '\\bin\\java.exe',''
+  # Returns: C:\Program Files\Java\jdk-21.0.12.1
   ```
+  - JAVA_HOME: `C:\Program Files\Java\jdk-21.0.12.1`
 
 ### 5.3 Add Maven
 - Scroll to **Maven** section → click **Add Maven**
