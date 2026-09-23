@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- Class Library produces a .dll artifact -->
     <OutputType>Library</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>MathLibrary</AssemblyName>
     <RootNamespace>MathLibrary</RootNamespace>
     <Nullable>enable</Nullable>

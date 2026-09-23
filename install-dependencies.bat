@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 :: ============================================================
 ::  Jenkins Build Dependencies Installer
-::  Installs: Maven 3.9.9, .NET 6 SDK, Jenkins LTS
+::  Installs: Maven 3.9.16, .NET 10 SDK (LTS), Jenkins LTS 2.555.3
 ::  Run this script as ADMINISTRATOR
 ::
 ::  SECURITY & SAFETY CHECKS APPLIED:
@@ -64,7 +64,7 @@ for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (
 echo.
 
 :: ============================================================
-::  STEP 2 – Install Apache Maven 3.9.9
+::  STEP 2 – Install Apache Maven 3.9.16
 :: ============================================================
 echo [2/4] Checking Maven...
 mvn -version >nul 2>&1
@@ -75,15 +75,15 @@ if %errorLevel% EQU 0 (
     goto :DOTNET
 )
 
-echo [INFO] Maven not found. Downloading Maven 3.9.9 from Apache CDN (HTTPS)...
+echo [INFO] Maven not found. Downloading Maven 3.9.16 from Apache CDN (HTTPS)...
 
-set "MAVEN_ZIP=%DOWNLOADS%\apache-maven-3.9.9-bin.zip"
+set "MAVEN_ZIP=%DOWNLOADS%\apache-maven-3.9.16-bin.zip"
 set "MAVEN_DIR=C:\Program Files\Maven"
-set "MAVEN_HOME=C:\Program Files\Maven\apache-maven-3.9.9"
+set "MAVEN_HOME=C:\Program Files\Maven\apache-maven-3.9.16"
 
 :: [S3] HTTPS-only download from official Apache CDN
 powershell -NoProfile -Command ^
-  "Invoke-WebRequest -Uri 'https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip' -OutFile '%MAVEN_ZIP%' -UseBasicParsing"
+  "Invoke-WebRequest -Uri 'https://dlcdn.apache.org/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip' -OutFile '%MAVEN_ZIP%' -UseBasicParsing"
 
 if not exist "%MAVEN_ZIP%" (
     echo [ERROR] Maven download failed. Check your internet connection.
@@ -92,7 +92,7 @@ if not exist "%MAVEN_ZIP%" (
 
 :: [S2] SHA-256 checksum verification
 echo [INFO] Verifying Maven ZIP checksum...
-set "MAVEN_EXPECTED_SHA=9f0afdd80b9bab87b37b72b0b9d82ee1ac5b30c3c6f0ed7c9a5adf9ba93b41b0"
+set "MAVEN_EXPECTED_SHA=5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce"
 for /f %%H in ('powershell -NoProfile -Command ^
   "(Get-FileHash -Path '%MAVEN_ZIP%' -Algorithm SHA256).Hash.ToLower()"') do set "MAVEN_ACTUAL_SHA=%%H"
 
@@ -132,13 +132,13 @@ if %errorLevel% NEQ 0 (
     echo [OK] Maven already in system PATH ^(no duplicate added^).
 )
 
-echo [OK] Maven 3.9.9 installed: %MAVEN_HOME%
+echo [OK] Maven 3.9.16 installed: %MAVEN_HOME%
 echo      Open a NEW terminal window to use 'mvn'.
 echo.
 
 :DOTNET
 :: ============================================================
-::  STEP 3 – Install .NET 6.0 SDK
+::  STEP 3 – Install .NET 10 SDK (LTS)
 :: ============================================================
 echo [3/4] Checking .NET SDK...
 dotnet --version >nul 2>&1
@@ -161,9 +161,9 @@ if not exist "%DOTNET_SCRIPT%" (
     goto :CLEANUP
 )
 
-echo [INFO] Installing .NET 6.0 SDK to C:\Program Files\dotnet ...
+echo [INFO] Installing .NET 10 SDK (LTS) to C:\Program Files\dotnet ...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%DOTNET_SCRIPT%" ^
-  -Channel 6.0 -InstallDir "C:\Program Files\dotnet"
+  -Channel 10.0 -InstallDir "C:\Program Files\dotnet"
 
 if not exist "C:\Program Files\dotnet\dotnet.exe" (
     echo [ERROR] .NET installation failed — dotnet.exe not found.
@@ -180,7 +180,7 @@ if %errorLevel% NEQ 0 (
     echo [OK] .NET already in system PATH ^(no duplicate added^).
 )
 
-echo [OK] .NET 6.0 SDK installed: C:\Program Files\dotnet
+echo [OK] .NET 10 SDK (LTS) installed: C:\Program Files\dotnet
 echo      Open a NEW terminal window to use 'dotnet'.
 echo.
 
@@ -278,8 +278,8 @@ echo  Component     Location
 echo  ------------- -----------------------------------------
 echo  Java          Already installed
 echo  Git           Already installed
-echo  Maven 3.9.9   C:\Program Files\Maven\apache-maven-3.9.9
-echo  .NET 6 SDK    C:\Program Files\dotnet
+echo  Maven 3.9.16  C:\Program Files\Maven\apache-maven-3.9.16
+echo  .NET 10 SDK   C:\Program Files\dotnet
 echo  Jenkins LTS   http://localhost:8080
 echo.
 echo  NEXT STEPS IN JENKINS UI:
@@ -288,7 +288,7 @@ echo  2. Enter the initial admin password shown above
 echo  3. Choose "Install suggested plugins"
 echo  4. Manage Jenkins ^> Global Tool Configuration:
 echo       JDK   name="JDK 11"    JAVA_HOME=%JAVA_HOME%
-echo       Maven name="Maven 3"   MAVEN_HOME=C:\Program Files\Maven\apache-maven-3.9.9
+echo       Maven name="Maven 3"   MAVEN_HOME=C:\Program Files\Maven\apache-maven-3.9.16
 echo  5. Create a Pipeline job for each project Jenkinsfile
 echo.
 echo ============================================================

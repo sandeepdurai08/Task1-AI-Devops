@@ -44,7 +44,7 @@ pipeline {
         stage('Verify DLL') {
             steps {
                 dir('projects/csharp-dll-project') {
-                    bat 'dir MathLibrary\\bin\\Release\\net6.0\\*.dll'
+                    bat 'dir MathLibrary\\bin\\Release\\net10.0\\*.dll'
                 }
             }
         }
@@ -53,7 +53,7 @@ pipeline {
     post {
         success {
             echo "C# DLL build succeeded! Branch: ${params.BRANCH}"
-            archiveArtifacts artifacts: 'projects/csharp-dll-project/MathLibrary/bin/Release/net6.0/*.dll',
+            archiveArtifacts artifacts: 'projects/csharp-dll-project/MathLibrary/bin/Release/net10.0/*.dll',
                              fingerprint: true
         }
         failure {
