@@ -1,6 +1,19 @@
 pipeline {
     agent any
 
+    parameters {
+        string(
+            name: 'GITHUB_URL',
+            defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git',
+            description: 'GitHub repository URL'
+        )
+        string(
+            name: 'BRANCH',
+            defaultValue: 'sandeep-08092026',
+            description: 'Branch to build'
+        )
+    }
+
     environment {
         DOTNET = 'dotnet'
     }
@@ -8,7 +21,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git url: "${params.GITHUB_URL}", branch: "${params.BRANCH}"
             }
         }
 
@@ -47,12 +60,12 @@ pipeline {
 
     post {
         success {
-            echo '.NET Console App build succeeded!'
+            echo ".NET Console App build succeeded! Branch: ${params.BRANCH}"
             archiveArtifacts artifacts: 'projects/dotnet-console-app/publish/**/*',
                              fingerprint: true
         }
         failure {
-            echo '.NET Console App build failed.'
+            echo ".NET Console App build failed. Branch: ${params.BRANCH}"
         }
     }
 }

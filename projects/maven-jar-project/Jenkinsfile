@@ -1,8 +1,20 @@
 pipeline {
     agent any
 
+    parameters {
+        string(
+            name: 'GITHUB_URL',
+            defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git',
+            description: 'GitHub repository URL'
+        )
+        string(
+            name: 'BRANCH',
+            defaultValue: 'sandeep-08092026',
+            description: 'Branch to build'
+        )
+    }
+
     tools {
-        // Make sure "Maven 3" is configured in Jenkins → Global Tool Configuration
         maven 'Maven 3'
         jdk   'JDK 11'
     }
@@ -10,7 +22,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git url: "${params.GITHUB_URL}", branch: "${params.BRANCH}"
             }
         }
 
@@ -33,11 +45,11 @@ pipeline {
 
     post {
         success {
-            echo 'Maven JAR build succeeded!'
+            echo "Maven JAR build succeeded! Branch: ${params.BRANCH}"
             archiveArtifacts artifacts: 'projects/maven-jar-project/target/*.jar', fingerprint: true
         }
         failure {
-            echo 'Maven JAR build failed.'
+            echo "Maven JAR build failed. Branch: ${params.BRANCH}"
         }
     }
 }
