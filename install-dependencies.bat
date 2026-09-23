@@ -287,7 +287,7 @@ echo  1. Open http://localhost:8080
 echo  2. Enter the initial admin password shown above
 echo  3. Choose "Install suggested plugins"
 echo  4. Manage Jenkins ^> Global Tool Configuration:
-echo       JDK   name="JDK 11"    JAVA_HOME=%JAVA_HOME%
+echo       JDK   name="JDK 21"    JAVA_HOME=%JAVA_HOME%
 echo       Maven name="Maven 3"   MAVEN_HOME=C:\Program Files\Maven\apache-maven-3.9.16
 echo  5. Create a Pipeline job for each project Jenkinsfile
 echo.

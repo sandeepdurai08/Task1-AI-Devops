@@ -200,7 +200,7 @@ Open your browser and go to: **http://localhost:8080**
 ### 5.2 Add JDK
 - Scroll to **JDK** section → click **Add JDK**
 - Uncheck **Install automatically**
-- Name: `JDK 11`  ← must match exactly what the Jenkinsfile expects
+- Name: `JDK 21`  ← must match exactly what the Jenkinsfile expects
 - JAVA_HOME: paste your Java path
 
   To find your Java path:
