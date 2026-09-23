@@ -1,4 +1,6 @@
 pipeline {
+    // agent any — restrict to a specific label in shared/production Jenkins
+    // e.g. agent { label 'windows' }
     agent any
 
     parameters {
@@ -20,6 +22,19 @@ pipeline {
     }
 
     stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (!params.GITHUB_URL?.startsWith('https://github.com/')) {
+                        error "GITHUB_URL must start with https://github.com/ — got: ${params.GITHUB_URL}"
+                    }
+                    if (!params.BRANCH?.matches('[a-zA-Z0-9._/-]+')) {
+                        error "BRANCH contains invalid characters: ${params.BRANCH}"
+                    }
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git url: "${params.GITHUB_URL}", branch: "${params.BRANCH}"

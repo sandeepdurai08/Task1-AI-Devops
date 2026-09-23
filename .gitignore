@@ -21,3 +21,16 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Maven build output
+projects/maven-jar-project/target/
+
+# .NET build output
+projects/csharp-dll-project/MathLibrary/bin/
+projects/csharp-dll-project/MathLibrary/obj/
+projects/dotnet-console-app/HelloApp/bin/
+projects/dotnet-console-app/HelloApp/obj/
+projects/dotnet-console-app/publish/
+
+# NuGet packages
+*.nupkg
