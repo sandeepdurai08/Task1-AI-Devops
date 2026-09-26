@@ -23,27 +23,32 @@ pipeline {
             description: 'SFTP server hostname'
         )
         string(
-            name: 'SFTP_USER',
-            defaultValue: 'sftp-user',
-            description: 'SFTP username'
-        )
-        string(
             name: 'SFTP_REMOTE_PATH',
             defaultValue: '/uploads/payment-system',
             description: 'SFTP remote base path (e.g. /uploads/payment-system)'
         )
+        // SFTP_CREDENTIAL_ID: ID of a "Username with password" credential
+        // stored in Jenkins Credentials Store — NOT the password itself.
+        // To add: Manage Jenkins > Credentials > Global > Add Credentials
+        //         Kind: Username with password
+        //         ID:   sftp-credentials  (use this value below)
+        string(
+            name: 'SFTP_CREDENTIAL_ID',
+            defaultValue: 'sftp-credentials',
+            description: 'Jenkins Credential ID for SFTP (Username with password)'
+        )
 
         // ── Module Toggles ────────────────────────────────────
-        booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true,  description: 'Build Payment Gateway module')
-        booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true,  description: 'Build Fraud Detection module')
-        booleanParam(name: 'BUILD_BILLING',          defaultValue: true,  description: 'Build Billing module')
-        booleanParam(name: 'BUILD_REFUND',           defaultValue: true,  description: 'Build Refund module')
-        booleanParam(name: 'BUILD_NOTIFICATION',     defaultValue: true,  description: 'Build Notification module')
-        booleanParam(name: 'BUILD_AUTH',             defaultValue: true,  description: 'Build Auth module')
-        booleanParam(name: 'BUILD_REPORTING',        defaultValue: true,  description: 'Build Reporting module')
-        booleanParam(name: 'BUILD_SETTLEMENT',       defaultValue: true,  description: 'Build Settlement module')
-        booleanParam(name: 'BUILD_RECONCILIATION',   defaultValue: false, description: 'Build Reconciliation module')
-        booleanParam(name: 'BUILD_AUDIT',            defaultValue: false, description: 'Build Audit module')
+        booleanParam(name: 'PAYMENT_GATEWAY',  defaultValue: true,  description: 'Enable Payment Gateway module')
+        booleanParam(name: 'FRAUD_DETECTION',  defaultValue: true,  description: 'Enable Fraud Detection module')
+        booleanParam(name: 'BILLING',          defaultValue: true,  description: 'Enable Billing module')
+        booleanParam(name: 'REFUND',           defaultValue: true,  description: 'Enable Refund module')
+        booleanParam(name: 'NOTIFICATION',     defaultValue: true,  description: 'Enable Notification module')
+        booleanParam(name: 'AUTH',             defaultValue: true,  description: 'Enable Auth module')
+        booleanParam(name: 'REPORTING',        defaultValue: true,  description: 'Enable Reporting module')
+        booleanParam(name: 'SETTLEMENT',       defaultValue: true,  description: 'Enable Settlement module')
+        booleanParam(name: 'RECONCILIATION',   defaultValue: false, description: 'Enable Reconciliation module')
+        booleanParam(name: 'AUDIT',            defaultValue: false, description: 'Enable Audit module')
     }
 
     environment {
@@ -56,33 +61,33 @@ pipeline {
 
         // ── Stage 1: Init ─────────────────────────────────────
         // Forces Jenkins to register ALL parameters on first run
-        // so "Build with Parameters" shows all 15 fields immediately
+        // so "Build with Parameters" shows all fields immediately
         stage('Init') {
             steps {
                 script {
                     properties([
                         parameters([
-                            string(name: 'GITHUB_URL',       defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git', description: 'GitHub repository URL'),
-                            string(name: 'BRANCH',           defaultValue: 'sandeep-08092026',        description: 'Branch to build'),
-                            string(name: 'SFTP_HOST',        defaultValue: 'sftp.example.com',         description: 'SFTP server hostname'),
-                            string(name: 'SFTP_USER',        defaultValue: 'sftp-user',                description: 'SFTP username'),
-                            string(name: 'SFTP_REMOTE_PATH', defaultValue: '/uploads/payment-system',  description: 'SFTP remote base path'),
-                            booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true),
-                            booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true),
-                            booleanParam(name: 'BUILD_BILLING',          defaultValue: true),
-                            booleanParam(name: 'BUILD_REFUND',           defaultValue: true),
-                            booleanParam(name: 'BUILD_NOTIFICATION',     defaultValue: true),
-                            booleanParam(name: 'BUILD_AUTH',             defaultValue: true),
-                            booleanParam(name: 'BUILD_REPORTING',        defaultValue: true),
-                            booleanParam(name: 'BUILD_SETTLEMENT',       defaultValue: true),
-                            booleanParam(name: 'BUILD_RECONCILIATION',   defaultValue: false),
-                            booleanParam(name: 'BUILD_AUDIT',            defaultValue: false)
+                            string(name: 'GITHUB_URL',          defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git', description: 'GitHub repository URL'),
+                            string(name: 'BRANCH',              defaultValue: 'sandeep-08092026',       description: 'Branch to build'),
+                            string(name: 'SFTP_HOST',           defaultValue: 'sftp.example.com',        description: 'SFTP server hostname'),
+                            string(name: 'SFTP_REMOTE_PATH',    defaultValue: '/uploads/payment-system', description: 'SFTP remote base path'),
+                            string(name: 'SFTP_CREDENTIAL_ID',  defaultValue: 'sftp-credentials',        description: 'Jenkins Credential ID for SFTP (Username with password)'),
+                            booleanParam(name: 'PAYMENT_GATEWAY',  defaultValue: true),
+                            booleanParam(name: 'FRAUD_DETECTION',  defaultValue: true),
+                            booleanParam(name: 'BILLING',          defaultValue: true),
+                            booleanParam(name: 'REFUND',           defaultValue: true),
+                            booleanParam(name: 'NOTIFICATION',     defaultValue: true),
+                            booleanParam(name: 'AUTH',             defaultValue: true),
+                            booleanParam(name: 'REPORTING',        defaultValue: true),
+                            booleanParam(name: 'SETTLEMENT',       defaultValue: true),
+                            booleanParam(name: 'RECONCILIATION',   defaultValue: false),
+                            booleanParam(name: 'AUDIT',            defaultValue: false)
                         ])
                     ])
                     echo "All parameters registered."
                     echo "Branch : ${params.BRANCH}"
-                    // [S1] Do NOT log SFTP_USER or SFTP_HOST — avoids exposing
-                    //      infrastructure details in the build log
+                    // [S1] Do NOT log SFTP_HOST or credential ID — avoids
+                    //      exposing infrastructure details in the build log
                     echo "SFTP target configured."
                 }
             }
@@ -92,33 +97,34 @@ pipeline {
         stage('Validate Parameters') {
             steps {
                 script {
-                    // [S2] URL must point to GitHub only — prevents redirecting
-                    //      checkout to a malicious external repo
+                    // [S2] URL must point to GitHub only
                     if (!params.GITHUB_URL?.startsWith('https://github.com/')) {
                         error "GITHUB_URL must start with https://github.com/"
                     }
-                    // [S3] Branch must contain only safe characters — prevents
-                    //      shell injection via branch name (e.g. '; rm -rf /')
+                    // [S3] Branch — safe characters only, prevents shell injection
                     if (!params.BRANCH?.matches('[a-zA-Z0-9._/-]+')) {
                         error "BRANCH contains invalid characters."
                     }
-                    // [S4] SFTP_REMOTE_PATH must be an absolute path starting
-                    //      with / — prevents directory traversal attacks
+                    // [S4] SFTP_REMOTE_PATH — absolute path, no traversal
                     if (!params.SFTP_REMOTE_PATH?.startsWith('/')) {
                         error "SFTP_REMOTE_PATH must be an absolute path starting with /"
                     }
                     if (params.SFTP_REMOTE_PATH?.contains('..')) {
                         error "SFTP_REMOTE_PATH must not contain '..' (directory traversal not allowed)"
                     }
-                    // [S5] SFTP_HOST must not be empty or contain shell-special chars
+                    // [S5] SFTP_HOST — safe hostname characters only
                     if (!params.SFTP_HOST?.matches('[a-zA-Z0-9._-]+')) {
                         error "SFTP_HOST contains invalid characters."
                     }
+                    // [S6] SFTP_CREDENTIAL_ID — must be a non-empty safe identifier
+                    if (!params.SFTP_CREDENTIAL_ID?.matches('[a-zA-Z0-9._-]+')) {
+                        error "SFTP_CREDENTIAL_ID contains invalid characters."
+                    }
                     // At least one module must be enabled
                     def moduleParams = [
-                        'BUILD_PAYMENT_GATEWAY', 'BUILD_FRAUD_DETECTION', 'BUILD_BILLING',
-                        'BUILD_REFUND', 'BUILD_NOTIFICATION', 'BUILD_AUTH',
-                        'BUILD_REPORTING', 'BUILD_SETTLEMENT', 'BUILD_RECONCILIATION', 'BUILD_AUDIT'
+                        'PAYMENT_GATEWAY', 'FRAUD_DETECTION', 'BILLING', 'REFUND',
+                        'NOTIFICATION', 'AUTH', 'REPORTING', 'SETTLEMENT',
+                        'RECONCILIATION', 'AUDIT'
                     ]
                     def anyEnabled = moduleParams.any { params[it] == true }
                     if (!anyEnabled) {
@@ -137,25 +143,23 @@ pipeline {
         }
 
         // ── Stage 4: Build Modules ────────────────────────────
-        // Only builds modules whose toggle is enabled
         stage('Build Modules') {
             steps {
                 script {
                     // [paramName, folderName, dllName]
                     def modules = [
-                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
-                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
-                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
-                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
-                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
-                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
-                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
-                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
-                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
-                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                        ['PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BILLING',          'Billing',         'Billing.dll'],
+                        ['REFUND',           'Refund',          'Refund.dll'],
+                        ['NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['AUTH',             'Auth',            'Auth.dll'],
+                        ['REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['AUDIT',            'Audit',           'Audit.dll']
                     ]
 
-                    // Create root artifacts folder
                     bat "if not exist ${env.ARTIFACTS_DIR} mkdir ${env.ARTIFACTS_DIR}"
 
                     modules.each { mod ->
@@ -178,79 +182,90 @@ pipeline {
         }
 
         // ── Stage 5: SFTP Upload ──────────────────────────────
-        // Requires "Publish Over SSH" Jenkins plugin
-        // Configure server in: Manage Jenkins > System > SSH Servers
-        // Server must be named exactly: SFTP_SERVER
-        // [S6] SFTP credentials (password/key) must be stored in Jenkins
-        //      credential store — NEVER passed as pipeline parameters
+        // [S7] Credentials are pulled from Jenkins Credentials Store using
+        //      withCredentials — the password is NEVER written to the
+        //      Jenkinsfile, build log, or parameter form.
+        //      SFTP_USR and SFTP_PWD are masked automatically in all logs.
+        //
+        // Requires "Publish Over SSH" Jenkins plugin.
+        // Configure server: Manage Jenkins > System > SSH Servers
+        //   Name: SFTP_SERVER  Host: <your host>  Username: (from credential)
         stage('SFTP Upload') {
             steps {
                 script {
                     def modules = [
-                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
-                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
-                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
-                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
-                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
-                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
-                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
-                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
-                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
-                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                        ['PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BILLING',          'Billing',         'Billing.dll'],
+                        ['REFUND',           'Refund',          'Refund.dll'],
+                        ['NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['AUTH',             'Auth',            'Auth.dll'],
+                        ['REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['AUDIT',            'Audit',           'Audit.dll']
                     ]
 
-                    modules.each { mod ->
-                        def paramName = mod[0]
-                        def folder    = mod[1]
-                        def dll       = mod[2]
+                    // withCredentials binds the stored username + password into
+                    // SFTP_USR and SFTP_PWD for the duration of this block only.
+                    // Both variables are automatically masked (shown as ****)
+                    // in all console output by the Credentials Binding plugin.
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: params.SFTP_CREDENTIAL_ID,
+                            usernameVariable: 'SFTP_USR',
+                            passwordVariable: 'SFTP_PWD'
+                        )
+                    ]) {
+                        modules.each { mod ->
+                            def paramName = mod[0]
+                            def folder    = mod[1]
+                            def dll       = mod[2]
 
-                        if (params[paramName]) {
-                            // [S7] Do NOT log SFTP paths in plain echo — use
-                            //      verbose:true on sshPublisher only for debug builds
-                            sshPublisher(
-                                publishers: [
-                                    sshPublisherDesc(
-                                        configName: 'SFTP_SERVER',
-                                        verbose: false,
-                                        transfers: [
-                                            sshTransfer(
-                                                sourceFiles:     "${env.ARTIFACTS_DIR}/${folder}/${dll}",
-                                                remoteDirectory: "${params.SFTP_REMOTE_PATH}/${folder}",
-                                                removePrefix:    "${env.ARTIFACTS_DIR}/${folder}"
-                                            )
-                                        ]
-                                    )
-                                ]
-                            )
-                            echo "✔ Uploaded: ${folder}"
-                        } else {
-                            echo "── Skipped SFTP: ${folder} (disabled) ──"
+                            if (params[paramName]) {
+                                sshPublisher(
+                                    publishers: [
+                                        sshPublisherDesc(
+                                            configName: 'SFTP_SERVER',
+                                            verbose: false,
+                                            transfers: [
+                                                sshTransfer(
+                                                    sourceFiles:     "${env.ARTIFACTS_DIR}/${folder}/${dll}",
+                                                    remoteDirectory: "${params.SFTP_REMOTE_PATH}/${folder}",
+                                                    removePrefix:    "${env.ARTIFACTS_DIR}/${folder}"
+                                                )
+                                            ]
+                                        )
+                                    ]
+                                )
+                                echo "✔ Uploaded: ${folder}"
+                            } else {
+                                echo "── Skipped SFTP: ${folder} (disabled) ──"
+                            }
                         }
-                    }
+                    } // end withCredentials — SFTP_USR and SFTP_PWD go out of scope here
                 }
             }
         }
 
         // ── Stage 6: Artifact Report ──────────────────────────
-        // Sets Jenkins build description to an HTML table showing:
-        // Module | Status | DLL local path | SFTP remote path
         stage('Artifact Report') {
             steps {
                 script {
                     def modules = [
-                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
-                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
-                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
-                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
-                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
-                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
-                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
-                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
-                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
-                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                        ['PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BILLING',          'Billing',         'Billing.dll'],
+                        ['REFUND',           'Refund',          'Refund.dll'],
+                        ['NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['AUTH',             'Auth',            'Auth.dll'],
+                        ['REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['AUDIT',            'Audit',           'Audit.dll']
                     ]
 
-                    // [S8] Sanitise any user-supplied string inserted into HTML
+                    // [S8] Sanitise user-supplied params before injecting into HTML
                     //      to prevent XSS via malicious BRANCH or SFTP_REMOTE_PATH values
                     def safeBranch   = params.BRANCH.replaceAll('[<>&"\']', '')
                     def safeSftpHost = params.SFTP_HOST.replaceAll('[<>&"\']', '')
@@ -310,7 +325,6 @@ pipeline {
         }
         failure {
             echo "Payment System build FAILED. Branch: ${params.BRANCH}"
-            // Clear any partial description so failure is obvious
             script {
                 currentBuild.description = "<b style='color:red;'>BUILD FAILED</b> — Branch: ${params.BRANCH} | Build: #${env.BUILD_NUMBER}"
             }
