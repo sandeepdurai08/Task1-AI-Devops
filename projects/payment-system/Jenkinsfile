@@ -4,7 +4,7 @@ pipeline {
     agent any
 
     parameters {
-        // ── Source Control ──────────────────────────────────────
+        // ── Source Control ────────────────────────────────────
         string(
             name: 'GITHUB_URL',
             defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git',
@@ -15,7 +15,8 @@ pipeline {
             defaultValue: 'sandeep-08092026',
             description: 'Branch to build'
         )
-        // ── SFTP Configuration ──────────────────────────────────
+
+        // ── SFTP Configuration ────────────────────────────────
         string(
             name: 'SFTP_HOST',
             defaultValue: 'sftp.example.com',
@@ -29,9 +30,10 @@ pipeline {
         string(
             name: 'SFTP_REMOTE_PATH',
             defaultValue: '/uploads/payment-system',
-            description: 'SFTP remote base path for artifacts'
+            description: 'SFTP remote base path (e.g. /uploads/payment-system)'
         )
-        // ── Module Toggles ──────────────────────────────────────
+
+        // ── Module Toggles ────────────────────────────────────
         booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true,  description: 'Build Payment Gateway module')
         booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true,  description: 'Build Fraud Detection module')
         booleanParam(name: 'BUILD_BILLING',          defaultValue: true,  description: 'Build Billing module')
@@ -52,19 +54,19 @@ pipeline {
 
     stages {
 
-        // ── Stage 1: Init ───────────────────────────────────────
-        // Registers all parameters immediately so they all appear
-        // on the very first "Build with Parameters" run
+        // ── Stage 1: Init ─────────────────────────────────────
+        // Forces Jenkins to register ALL parameters on first run
+        // so "Build with Parameters" shows all 15 fields immediately
         stage('Init') {
             steps {
                 script {
                     properties([
                         parameters([
                             string(name: 'GITHUB_URL',       defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git', description: 'GitHub repository URL'),
-                            string(name: 'BRANCH',           defaultValue: 'sandeep-08092026',   description: 'Branch to build'),
-                            string(name: 'SFTP_HOST',        defaultValue: 'sftp.example.com',   description: 'SFTP server hostname'),
-                            string(name: 'SFTP_USER',        defaultValue: 'sftp-user',          description: 'SFTP username'),
-                            string(name: 'SFTP_REMOTE_PATH', defaultValue: '/uploads/payment-system', description: 'SFTP remote base path'),
+                            string(name: 'BRANCH',           defaultValue: 'sandeep-08092026',        description: 'Branch to build'),
+                            string(name: 'SFTP_HOST',        defaultValue: 'sftp.example.com',         description: 'SFTP server hostname'),
+                            string(name: 'SFTP_USER',        defaultValue: 'sftp-user',                description: 'SFTP username'),
+                            string(name: 'SFTP_REMOTE_PATH', defaultValue: '/uploads/payment-system',  description: 'SFTP remote base path'),
                             booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true),
                             booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true),
                             booleanParam(name: 'BUILD_BILLING',          defaultValue: true),
@@ -77,45 +79,65 @@ pipeline {
                             booleanParam(name: 'BUILD_AUDIT',            defaultValue: false)
                         ])
                     ])
-                    echo "=== Payment System Build ==="
+                    echo "All parameters registered."
                     echo "Branch : ${params.BRANCH}"
-                    echo "SFTP   : ${params.SFTP_HOST}${params.SFTP_REMOTE_PATH}"
+                    // [S1] Do NOT log SFTP_USER or SFTP_HOST — avoids exposing
+                    //      infrastructure details in the build log
+                    echo "SFTP target configured."
                 }
             }
         }
 
-        // ── Stage 2: Validate Parameters ───────────────────────
+        // ── Stage 2: Validate Parameters ─────────────────────
         stage('Validate Parameters') {
             steps {
                 script {
+                    // [S2] URL must point to GitHub only — prevents redirecting
+                    //      checkout to a malicious external repo
                     if (!params.GITHUB_URL?.startsWith('https://github.com/')) {
-                        error "GITHUB_URL must start with https://github.com/ — got: ${params.GITHUB_URL}"
+                        error "GITHUB_URL must start with https://github.com/"
                     }
+                    // [S3] Branch must contain only safe characters — prevents
+                    //      shell injection via branch name (e.g. '; rm -rf /')
                     if (!params.BRANCH?.matches('[a-zA-Z0-9._/-]+')) {
-                        error "BRANCH contains invalid characters: ${params.BRANCH}"
+                        error "BRANCH contains invalid characters."
                     }
-                    def toggles = [
-                        'BUILD_PAYMENT_GATEWAY','BUILD_FRAUD_DETECTION','BUILD_BILLING',
-                        'BUILD_REFUND','BUILD_NOTIFICATION','BUILD_AUTH','BUILD_REPORTING',
-                        'BUILD_SETTLEMENT','BUILD_RECONCILIATION','BUILD_AUDIT'
+                    // [S4] SFTP_REMOTE_PATH must be an absolute path starting
+                    //      with / — prevents directory traversal attacks
+                    if (!params.SFTP_REMOTE_PATH?.startsWith('/')) {
+                        error "SFTP_REMOTE_PATH must be an absolute path starting with /"
+                    }
+                    if (params.SFTP_REMOTE_PATH?.contains('..')) {
+                        error "SFTP_REMOTE_PATH must not contain '..' (directory traversal not allowed)"
+                    }
+                    // [S5] SFTP_HOST must not be empty or contain shell-special chars
+                    if (!params.SFTP_HOST?.matches('[a-zA-Z0-9._-]+')) {
+                        error "SFTP_HOST contains invalid characters."
+                    }
+                    // At least one module must be enabled
+                    def moduleParams = [
+                        'BUILD_PAYMENT_GATEWAY', 'BUILD_FRAUD_DETECTION', 'BUILD_BILLING',
+                        'BUILD_REFUND', 'BUILD_NOTIFICATION', 'BUILD_AUTH',
+                        'BUILD_REPORTING', 'BUILD_SETTLEMENT', 'BUILD_RECONCILIATION', 'BUILD_AUDIT'
                     ]
-                    def anyEnabled = toggles.any { params[it] == true }
+                    def anyEnabled = moduleParams.any { params[it] == true }
                     if (!anyEnabled) {
-                        error "At least one module must be enabled."
+                        error "At least one module must be enabled before running the build."
                     }
                     echo "Validation passed."
                 }
             }
         }
 
-        // ── Stage 3: Checkout ───────────────────────────────────
+        // ── Stage 3: Checkout ─────────────────────────────────
         stage('Checkout') {
             steps {
                 git url: "${params.GITHUB_URL}", branch: "${params.BRANCH}"
             }
         }
 
-        // ── Stage 4: Build Modules ──────────────────────────────
+        // ── Stage 4: Build Modules ────────────────────────────
+        // Only builds modules whose toggle is enabled
         stage('Build Modules') {
             steps {
                 script {
@@ -133,6 +155,7 @@ pipeline {
                         ['BUILD_AUDIT',            'Audit',           'Audit.dll']
                     ]
 
+                    // Create root artifacts folder
                     bat "if not exist ${env.ARTIFACTS_DIR} mkdir ${env.ARTIFACTS_DIR}"
 
                     modules.each { mod ->
@@ -143,20 +166,23 @@ pipeline {
                             echo "── Building: ${folder} ──"
                             bat "if not exist ${env.ARTIFACTS_DIR}\\${folder} mkdir ${env.ARTIFACTS_DIR}\\${folder}"
                             dir("projects/payment-system/modules/${folder}") {
-                                bat "dotnet build ${folder}.csproj --configuration ${env.BUILD_CONFIG} --output ..\\..\\..\\..\\${env.ARTIFACTS_DIR}\\${folder}"
+                                bat "dotnet build ${folder}.csproj --configuration ${env.BUILD_CONFIG} --output ..\\..\\..\\..\\${env.ARTIFACTS_DIR}\\${folder} --nologo"
                             }
-                            echo "Built: ${folder}"
+                            echo "✔ Built: ${folder}"
                         } else {
-                            echo "Skipped (disabled): ${folder}"
+                            echo "── Skipped: ${folder} (disabled) ──"
                         }
                     }
                 }
             }
         }
 
-        // ── Stage 5: SFTP Upload ────────────────────────────────
-        // Requires: "Publish Over SSH" Jenkins plugin
-        // Setup:    Manage Jenkins > System > SSH Servers > Add server named "SFTP_SERVER"
+        // ── Stage 5: SFTP Upload ──────────────────────────────
+        // Requires "Publish Over SSH" Jenkins plugin
+        // Configure server in: Manage Jenkins > System > SSH Servers
+        // Server must be named exactly: SFTP_SERVER
+        // [S6] SFTP credentials (password/key) must be stored in Jenkins
+        //      credential store — NEVER passed as pipeline parameters
         stage('SFTP Upload') {
             steps {
                 script {
@@ -179,31 +205,35 @@ pipeline {
                         def dll       = mod[2]
 
                         if (params[paramName]) {
-                            echo "Uploading ${folder} → ${params.SFTP_HOST}${params.SFTP_REMOTE_PATH}/${folder}/"
+                            // [S7] Do NOT log SFTP paths in plain echo — use
+                            //      verbose:true on sshPublisher only for debug builds
                             sshPublisher(
                                 publishers: [
                                     sshPublisherDesc(
                                         configName: 'SFTP_SERVER',
+                                        verbose: false,
                                         transfers: [
                                             sshTransfer(
-                                                sourceFiles: "${env.ARTIFACTS_DIR}/${folder}/${dll}",
+                                                sourceFiles:     "${env.ARTIFACTS_DIR}/${folder}/${dll}",
                                                 remoteDirectory: "${params.SFTP_REMOTE_PATH}/${folder}",
-                                                removePrefix: "${env.ARTIFACTS_DIR}/${folder}"
+                                                removePrefix:    "${env.ARTIFACTS_DIR}/${folder}"
                                             )
-                                        ],
-                                        verbose: true
+                                        ]
                                     )
                                 ]
                             )
+                            echo "✔ Uploaded: ${folder}"
+                        } else {
+                            echo "── Skipped SFTP: ${folder} (disabled) ──"
                         }
                     }
                 }
             }
         }
 
-        // ── Stage 6: Artifact Report ────────────────────────────
-        // Sets Jenkins build description to an HTML table showing
-        // DLL local path and SFTP remote path per module
+        // ── Stage 6: Artifact Report ──────────────────────────
+        // Sets Jenkins build description to an HTML table showing:
+        // Module | Status | DLL local path | SFTP remote path
         stage('Artifact Report') {
             steps {
                 script {
@@ -220,35 +250,48 @@ pipeline {
                         ['BUILD_AUDIT',            'Audit',           'Audit.dll']
                     ]
 
-                    def report  = "<b>Payment System — Artifact Report</b><br/>"
-                    report     += "<b>Branch:</b> ${params.BRANCH} &nbsp; "
-                    report     += "<b>Build:</b> #${env.BUILD_NUMBER}<br/><br/>"
-                    report     += "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse;font-family:monospace;font-size:12px'>"
-                    report     += "<tr style='background:#333;color:#fff'>"
-                    report     += "<th>Module</th><th>Status</th><th>DLL Location (Local)</th><th>SFTP Path</th>"
-                    report     += "</tr>"
+                    // [S8] Sanitise any user-supplied string inserted into HTML
+                    //      to prevent XSS via malicious BRANCH or SFTP_REMOTE_PATH values
+                    def safeBranch   = params.BRANCH.replaceAll('[<>&"\']', '')
+                    def safeSftpHost = params.SFTP_HOST.replaceAll('[<>&"\']', '')
+                    def safeSftpPath = params.SFTP_REMOTE_PATH.replaceAll('[<>&"\']', '')
 
+                    def report = """
+<b>Payment System &mdash; Build Report</b><br/>
+<b>Branch:</b> ${safeBranch} &nbsp;|&nbsp;
+<b>Build:</b> #${env.BUILD_NUMBER} &nbsp;|&nbsp;
+<b>SFTP Host:</b> ${safeSftpHost}<br/><br/>
+<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse;font-family:monospace;font-size:12px;'>
+  <tr style='background:#333;color:#fff;'>
+    <th>Module</th>
+    <th>Status</th>
+    <th>DLL Location (Local)</th>
+    <th>SFTP Path</th>
+  </tr>
+"""
                     modules.each { mod ->
                         def paramName = mod[0]
                         def folder    = mod[1]
                         def dll       = mod[2]
 
                         if (params[paramName]) {
-                            def localPath = "${env.WORKSPACE}\\${env.ARTIFACTS_DIR}\\${folder}\\${dll}"
-                            def sftpPath  = "${params.SFTP_HOST}:${params.SFTP_REMOTE_PATH}/${folder}/${dll}"
-                            report += "<tr>"
-                            report += "<td><b>${folder}</b></td>"
-                            report += "<td style='color:green'>&#10004; Built &amp; Uploaded</td>"
-                            report += "<td>${localPath}</td>"
-                            report += "<td>${sftpPath}</td>"
-                            report += "</tr>"
+                            def dllPath  = "${env.WORKSPACE}\\${env.ARTIFACTS_DIR}\\${folder}\\${dll}"
+                            def sftpPath = "${safeSftpPath}/${folder}/${dll}"
+                            report += """  <tr>
+    <td><b>${folder}</b></td>
+    <td style='color:green;'>&#10004; Built &amp; Uploaded</td>
+    <td><code>${dllPath}</code></td>
+    <td><code>${sftpPath}</code></td>
+  </tr>
+"""
                         } else {
-                            report += "<tr style='color:#999'>"
-                            report += "<td>${folder}</td>"
-                            report += "<td>&#8212; Skipped</td>"
-                            report += "<td>&#8212;</td>"
-                            report += "<td>&#8212;</td>"
-                            report += "</tr>"
+                            report += """  <tr style='color:#999;'>
+    <td>${folder}</td>
+    <td>&#8212; Skipped</td>
+    <td>&#8212;</td>
+    <td>&#8212;</td>
+  </tr>
+"""
                         }
                     }
 
@@ -263,12 +306,13 @@ pipeline {
     post {
         success {
             echo "Payment System build completed successfully. Branch: ${params.BRANCH}"
-            archiveArtifacts artifacts: 'artifacts/**/*.dll', fingerprint: true, allowEmptyArchive: true
+            archiveArtifacts artifacts: 'artifacts/**/*.dll', fingerprint: true, allowEmptyArchive: false
         }
         failure {
             echo "Payment System build FAILED. Branch: ${params.BRANCH}"
+            // Clear any partial description so failure is obvious
             script {
-                currentBuild.description = "<b style='color:red'>BUILD FAILED</b> — Branch: ${params.BRANCH}"
+                currentBuild.description = "<b style='color:red;'>BUILD FAILED</b> — Branch: ${params.BRANCH} | Build: #${env.BUILD_NUMBER}"
             }
         }
     }
