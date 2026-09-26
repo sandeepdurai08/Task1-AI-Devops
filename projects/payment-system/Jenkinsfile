@@ -1,0 +1,275 @@
+pipeline {
+    // agent any — restrict to a specific label in shared/production Jenkins
+    // e.g. agent { label 'windows' }
+    agent any
+
+    parameters {
+        // ── Source Control ──────────────────────────────────────
+        string(
+            name: 'GITHUB_URL',
+            defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git',
+            description: 'GitHub repository URL'
+        )
+        string(
+            name: 'BRANCH',
+            defaultValue: 'sandeep-08092026',
+            description: 'Branch to build'
+        )
+        // ── SFTP Configuration ──────────────────────────────────
+        string(
+            name: 'SFTP_HOST',
+            defaultValue: 'sftp.example.com',
+            description: 'SFTP server hostname'
+        )
+        string(
+            name: 'SFTP_USER',
+            defaultValue: 'sftp-user',
+            description: 'SFTP username'
+        )
+        string(
+            name: 'SFTP_REMOTE_PATH',
+            defaultValue: '/uploads/payment-system',
+            description: 'SFTP remote base path for artifacts'
+        )
+        // ── Module Toggles ──────────────────────────────────────
+        booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true,  description: 'Build Payment Gateway module')
+        booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true,  description: 'Build Fraud Detection module')
+        booleanParam(name: 'BUILD_BILLING',          defaultValue: true,  description: 'Build Billing module')
+        booleanParam(name: 'BUILD_REFUND',           defaultValue: true,  description: 'Build Refund module')
+        booleanParam(name: 'BUILD_NOTIFICATION',     defaultValue: true,  description: 'Build Notification module')
+        booleanParam(name: 'BUILD_AUTH',             defaultValue: true,  description: 'Build Auth module')
+        booleanParam(name: 'BUILD_REPORTING',        defaultValue: true,  description: 'Build Reporting module')
+        booleanParam(name: 'BUILD_SETTLEMENT',       defaultValue: true,  description: 'Build Settlement module')
+        booleanParam(name: 'BUILD_RECONCILIATION',   defaultValue: false, description: 'Build Reconciliation module')
+        booleanParam(name: 'BUILD_AUDIT',            defaultValue: false, description: 'Build Audit module')
+    }
+
+    environment {
+        DOTNET        = 'dotnet'
+        BUILD_CONFIG  = 'Release'
+        ARTIFACTS_DIR = 'artifacts'
+    }
+
+    stages {
+
+        // ── Stage 1: Init ───────────────────────────────────────
+        // Registers all parameters immediately so they all appear
+        // on the very first "Build with Parameters" run
+        stage('Init') {
+            steps {
+                script {
+                    properties([
+                        parameters([
+                            string(name: 'GITHUB_URL',       defaultValue: 'https://github.com/sandeepdurai08/Task1-AI-Devops.git', description: 'GitHub repository URL'),
+                            string(name: 'BRANCH',           defaultValue: 'sandeep-08092026',   description: 'Branch to build'),
+                            string(name: 'SFTP_HOST',        defaultValue: 'sftp.example.com',   description: 'SFTP server hostname'),
+                            string(name: 'SFTP_USER',        defaultValue: 'sftp-user',          description: 'SFTP username'),
+                            string(name: 'SFTP_REMOTE_PATH', defaultValue: '/uploads/payment-system', description: 'SFTP remote base path'),
+                            booleanParam(name: 'BUILD_PAYMENT_GATEWAY',  defaultValue: true),
+                            booleanParam(name: 'BUILD_FRAUD_DETECTION',  defaultValue: true),
+                            booleanParam(name: 'BUILD_BILLING',          defaultValue: true),
+                            booleanParam(name: 'BUILD_REFUND',           defaultValue: true),
+                            booleanParam(name: 'BUILD_NOTIFICATION',     defaultValue: true),
+                            booleanParam(name: 'BUILD_AUTH',             defaultValue: true),
+                            booleanParam(name: 'BUILD_REPORTING',        defaultValue: true),
+                            booleanParam(name: 'BUILD_SETTLEMENT',       defaultValue: true),
+                            booleanParam(name: 'BUILD_RECONCILIATION',   defaultValue: false),
+                            booleanParam(name: 'BUILD_AUDIT',            defaultValue: false)
+                        ])
+                    ])
+                    echo "=== Payment System Build ==="
+                    echo "Branch : ${params.BRANCH}"
+                    echo "SFTP   : ${params.SFTP_HOST}${params.SFTP_REMOTE_PATH}"
+                }
+            }
+        }
+
+        // ── Stage 2: Validate Parameters ───────────────────────
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (!params.GITHUB_URL?.startsWith('https://github.com/')) {
+                        error "GITHUB_URL must start with https://github.com/ — got: ${params.GITHUB_URL}"
+                    }
+                    if (!params.BRANCH?.matches('[a-zA-Z0-9._/-]+')) {
+                        error "BRANCH contains invalid characters: ${params.BRANCH}"
+                    }
+                    def toggles = [
+                        'BUILD_PAYMENT_GATEWAY','BUILD_FRAUD_DETECTION','BUILD_BILLING',
+                        'BUILD_REFUND','BUILD_NOTIFICATION','BUILD_AUTH','BUILD_REPORTING',
+                        'BUILD_SETTLEMENT','BUILD_RECONCILIATION','BUILD_AUDIT'
+                    ]
+                    def anyEnabled = toggles.any { params[it] == true }
+                    if (!anyEnabled) {
+                        error "At least one module must be enabled."
+                    }
+                    echo "Validation passed."
+                }
+            }
+        }
+
+        // ── Stage 3: Checkout ───────────────────────────────────
+        stage('Checkout') {
+            steps {
+                git url: "${params.GITHUB_URL}", branch: "${params.BRANCH}"
+            }
+        }
+
+        // ── Stage 4: Build Modules ──────────────────────────────
+        stage('Build Modules') {
+            steps {
+                script {
+                    // [paramName, folderName, dllName]
+                    def modules = [
+                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
+                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
+                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
+                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                    ]
+
+                    bat "if not exist ${env.ARTIFACTS_DIR} mkdir ${env.ARTIFACTS_DIR}"
+
+                    modules.each { mod ->
+                        def paramName = mod[0]
+                        def folder    = mod[1]
+
+                        if (params[paramName]) {
+                            echo "── Building: ${folder} ──"
+                            bat "if not exist ${env.ARTIFACTS_DIR}\\${folder} mkdir ${env.ARTIFACTS_DIR}\\${folder}"
+                            dir("projects/payment-system/modules/${folder}") {
+                                bat "dotnet build ${folder}.csproj --configuration ${env.BUILD_CONFIG} --output ..\\..\\..\\..\\${env.ARTIFACTS_DIR}\\${folder}"
+                            }
+                            echo "Built: ${folder}"
+                        } else {
+                            echo "Skipped (disabled): ${folder}"
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Stage 5: SFTP Upload ────────────────────────────────
+        // Requires: "Publish Over SSH" Jenkins plugin
+        // Setup:    Manage Jenkins > System > SSH Servers > Add server named "SFTP_SERVER"
+        stage('SFTP Upload') {
+            steps {
+                script {
+                    def modules = [
+                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
+                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
+                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
+                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                    ]
+
+                    modules.each { mod ->
+                        def paramName = mod[0]
+                        def folder    = mod[1]
+                        def dll       = mod[2]
+
+                        if (params[paramName]) {
+                            echo "Uploading ${folder} → ${params.SFTP_HOST}${params.SFTP_REMOTE_PATH}/${folder}/"
+                            sshPublisher(
+                                publishers: [
+                                    sshPublisherDesc(
+                                        configName: 'SFTP_SERVER',
+                                        transfers: [
+                                            sshTransfer(
+                                                sourceFiles: "${env.ARTIFACTS_DIR}/${folder}/${dll}",
+                                                remoteDirectory: "${params.SFTP_REMOTE_PATH}/${folder}",
+                                                removePrefix: "${env.ARTIFACTS_DIR}/${folder}"
+                                            )
+                                        ],
+                                        verbose: true
+                                    )
+                                ]
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Stage 6: Artifact Report ────────────────────────────
+        // Sets Jenkins build description to an HTML table showing
+        // DLL local path and SFTP remote path per module
+        stage('Artifact Report') {
+            steps {
+                script {
+                    def modules = [
+                        ['BUILD_PAYMENT_GATEWAY',  'PaymentGateway',  'PaymentGateway.dll'],
+                        ['BUILD_FRAUD_DETECTION',  'FraudDetection',  'FraudDetection.dll'],
+                        ['BUILD_BILLING',          'Billing',         'Billing.dll'],
+                        ['BUILD_REFUND',           'Refund',          'Refund.dll'],
+                        ['BUILD_NOTIFICATION',     'Notification',    'Notification.dll'],
+                        ['BUILD_AUTH',             'Auth',            'Auth.dll'],
+                        ['BUILD_REPORTING',        'Reporting',       'Reporting.dll'],
+                        ['BUILD_SETTLEMENT',       'Settlement',      'Settlement.dll'],
+                        ['BUILD_RECONCILIATION',   'Reconciliation',  'Reconciliation.dll'],
+                        ['BUILD_AUDIT',            'Audit',           'Audit.dll']
+                    ]
+
+                    def report  = "<b>Payment System — Artifact Report</b><br/>"
+                    report     += "<b>Branch:</b> ${params.BRANCH} &nbsp; "
+                    report     += "<b>Build:</b> #${env.BUILD_NUMBER}<br/><br/>"
+                    report     += "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse;font-family:monospace;font-size:12px'>"
+                    report     += "<tr style='background:#333;color:#fff'>"
+                    report     += "<th>Module</th><th>Status</th><th>DLL Location (Local)</th><th>SFTP Path</th>"
+                    report     += "</tr>"
+
+                    modules.each { mod ->
+                        def paramName = mod[0]
+                        def folder    = mod[1]
+                        def dll       = mod[2]
+
+                        if (params[paramName]) {
+                            def localPath = "${env.WORKSPACE}\\${env.ARTIFACTS_DIR}\\${folder}\\${dll}"
+                            def sftpPath  = "${params.SFTP_HOST}:${params.SFTP_REMOTE_PATH}/${folder}/${dll}"
+                            report += "<tr>"
+                            report += "<td><b>${folder}</b></td>"
+                            report += "<td style='color:green'>&#10004; Built &amp; Uploaded</td>"
+                            report += "<td>${localPath}</td>"
+                            report += "<td>${sftpPath}</td>"
+                            report += "</tr>"
+                        } else {
+                            report += "<tr style='color:#999'>"
+                            report += "<td>${folder}</td>"
+                            report += "<td>&#8212; Skipped</td>"
+                            report += "<td>&#8212;</td>"
+                            report += "<td>&#8212;</td>"
+                            report += "</tr>"
+                        }
+                    }
+
+                    report += "</table>"
+                    currentBuild.description = report
+                    echo "Artifact report written to build description."
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Payment System build completed successfully. Branch: ${params.BRANCH}"
+            archiveArtifacts artifacts: 'artifacts/**/*.dll', fingerprint: true, allowEmptyArchive: true
+        }
+        failure {
+            echo "Payment System build FAILED. Branch: ${params.BRANCH}"
+            script {
+                currentBuild.description = "<b style='color:red'>BUILD FAILED</b> — Branch: ${params.BRANCH}"
+            }
+        }
+    }
+}
