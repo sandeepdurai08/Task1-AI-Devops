@@ -7,8 +7,8 @@ All LLM system prompts, their settings, examples, and fallback behaviour.
 ## LLM Endpoint
 
 ```
-URL:   https://exterrollm.exterrocloud.info/v1/chat/completions
-Model: /exterro/services/models/Qwen3-30B-A3B-Instruct-2507
+URL:   $LLM_URL    (set in .env)
+Model: $LLM_MODEL  (set in .env)
 ```
 
 OpenAI-compatible API. Configured via `LLM_URL`, `LLM_MODEL`, `LLM_API_KEY`,
@@ -33,13 +33,14 @@ messages = [
 
 ---
 
-## LLM is used for five things
+## LLM is used for six things
 
 | Function | File | LLM call | Fallback |
 |---|---|---|---|
 | `detect_intent()` | llm_client.py | **No** — pure regex | — always works |
 | `general_chat_response()` | llm_client.py | Yes | Hardcoded help message |
 | `parse_jenkins_query()` | llm_client.py | Yes | `action:"unknown"` → help text |
+| `parse_job_filter_update()` | llm_client.py | Yes | Regex fallback (next/prev/clear/fail/hotfix) |
 | `select_job()` | llm_client.py | Yes | `confidence:"low"` → job picker |
 | `parse_build_request()` | llm_client.py | Yes | All required fields missing → dev fills |
 | `llm_analyze_build_failure()` | llm_client.py | Yes (20s timeout) | Regex pattern matching |
@@ -118,36 +119,49 @@ The user may phrase requests informally — map them to the closest action.
 Actions available:
 list_jobs | list_views | list_jobs_in_view | stop_build | who_triggered |
 permissions | list_artifacts | console_log | sftp_path | analyze_failure |
-search_jobs | unknown
+search_jobs | list_running_builds | list_build_history | retry_build |
+list_queue | list_agents | list_build_changes | compare_builds |
+search_failed_builds | get_jenkins_info | list_plugins | unknown
 
 Common phrasings:
 - "who build/built/ran/triggered/did" → who_triggered
 - "check who build" → who_triggered
 - "stop/abort/cancel/kill the build" → stop_build
+- "retry/rebuild/run again" → retry_build
 - "show/get/fetch/print logs/output/console" → console_log
 - "why did it fail / what went wrong / root cause / analyze failure" → analyze_failure
 - "show/list/get artifacts/files/dlls" → list_artifacts
 - "artifacts" (alone), "artifact location of X", "need only artifact X" → list_artifacts
-- "where are the artifacts for X" → list_artifacts
 - "sftp/upload path/where was it uploaded" → sftp_path
 - "list/show/get jobs" → list_jobs
 - "list/show views" → list_views
 - "jobs in <view> view/folder" → list_jobs_in_view
 - "my permissions/access/role" → permissions
 - "search/find job <keyword>" → search_jobs
+- "running builds / what is building / currently building" → list_running_builds
+- "build history / last N builds / recent builds" → list_build_history
+- "Jenkins queue / pending builds / what is waiting" → list_queue
+- "agents / nodes / executor status" → list_agents
+- "what changed / git commits / changeset / changed files" → list_build_changes
+- "compare build X and Y / diff builds" → compare_builds
+- "failed builds / failure history / builds that failed" → search_failed_builds
+- "Jenkins version / Jenkins info / Jenkins health" → get_jenkins_info
+- "plugins / installed plugins" → list_plugins
 
 Return ONLY a JSON object (no prose):
-{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null}
+{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10}
 
 Rules:
 - job_name / view_name must be an exact name from the provided lists, or null.
 - build_number: integer when the user mentions a specific build number, else null.
+- build_number_b: second build number for compare_builds (e.g. "compare 5 and 6").
 - lines: defaults to 50 for console_log, 20 for analyze_failure.
+- count: number of builds for list_build_history / search_failed_builds (default 10).
 - search_query: only for search_jobs.
 - If unclear, action = "unknown".
 
-Jobs: DOTNET service, JAVA service, csharp, HOT_fix_job, Hotfix-payment, check_job
-Views: All, Failing Jobs
+Jobs: payments-build, java-service, dotnet-api, hotfix-deploy
+Views: All, Failed Builds
 ```
 
 ### Settings
@@ -156,22 +170,34 @@ Views: All, Failing Jobs
 
 ### Example interactions
 
-**User:** `check who build the DOTNET`  
+**User:** `check who build the payments-build`  
 **LLM output:**
 ```json
-{"action":"who_triggered","job_name":"DOTNET service","build_number":null,"view_name":null,"lines":50,"search_query":null}
+{"action":"who_triggered","job_name":"payments-build","build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10}
 ```
 
-**User:** `show console log for csharp build 5 last 30 lines`  
+**User:** `show console log for java-service build 5 last 30 lines`  
 **LLM output:**
 ```json
-{"action":"console_log","job_name":"csharp","build_number":5,"view_name":null,"lines":30,"search_query":null}
+{"action":"console_log","job_name":"java-service","build_number":5,"view_name":null,"lines":30,"search_query":null,"build_number_b":null,"count":10}
 ```
 
-**User:** `why did JAVA service fail`  
+**User:** `why did dotnet-api fail`  
 **LLM output:**
 ```json
-{"action":"analyze_failure","job_name":"JAVA service","build_number":null,"view_name":null,"lines":20,"search_query":null}
+{"action":"analyze_failure","job_name":"dotnet-api","build_number":null,"view_name":null,"lines":20,"search_query":null,"build_number_b":null,"count":10}
+```
+
+**User:** `compare build 5 and 6 of payments-build`  
+**LLM output:**
+```json
+{"action":"compare_builds","job_name":"payments-build","build_number":5,"view_name":null,"lines":50,"search_query":null,"build_number_b":6,"count":10}
+```
+
+**User:** `show failed builds for java-service last 15`  
+**LLM output:**
+```json
+{"action":"search_failed_builds","job_name":"java-service","build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":15}
 ```
 
 ### Post-processing
@@ -193,9 +219,9 @@ Returns `{"action":"unknown"}` → bot shows a help message listing supported qu
 You are BuildBot. Select the single most appropriate Jenkins job for the developer's request.
 
 Available jobs:
-  - DOTNET service — builds .NET services
-  - JAVA service   — builds Java services
-  - csharp         — C# compilation job
+  - payments-build — builds the Payments service
+  - java-service   — Java microservice build
+  - dotnet-api     — .NET API build job
 
 Return ONLY a JSON object:
 {"job_name": "<exact name or null>", "confidence": "high" or "low", "reason": "<one sentence>"}
@@ -209,7 +235,7 @@ Rules: job_name must be from the list or null. high = one job clearly fits. No p
 
 ### Example
 **User:** `build hotfix/PAY-1 from https://github.com/acme/repo`  
-**LLM:** `{"job_name":"DOTNET service","confidence":"high","reason":"Message matches .NET service job"}`
+**LLM:** `{"job_name":"payments-build","confidence":"high","reason":"Message mentions payments and hotfix, matching payments-build"}`
 
 ### Fallback (LLM unavailable)
 Returns `{"job_name":null,"confidence":"low"}` → job picker shown → user clicks.
@@ -313,6 +339,63 @@ permission, disk full, timeout). Result includes `"source":"regex"` vs `"source"
 
 ---
 
+## Prompt 6 — Job Browser Filter Update
+
+**When called:** User sends a message while the job browser card is active (navigating/filtering).  
+**Location:** `parse_job_filter_update()` in `llm_client.py`
+
+### System prompt (current filters injected)
+```
+You are BuildBot. Parse a job browser filter command.
+Current filters: {"status":"","hotfix":false,"q":"","repo":"","page":1,"sort":"name"}
+
+Return ONLY JSON:
+{"action":"filter|next|prev|page_N|clear|select","status":"","hotfix":false,"q":"","repo":"","branch":"","sort":"","select_job":null}
+
+action values:
+- "filter": apply/change filters (status, hotfix, repo, branch, q, sort)
+- "next": go to next page
+- "prev": go to previous page
+- "page_N": go to specific page (replace N with the number)
+- "clear": reset all filters
+- "select": user named a specific job (set select_job to the job name)
+
+status values: FAILURE|SUCCESS|BUILDING|UNSTABLE|ALL (empty = no change)
+sort values: name|status|failed|duration (empty = no change)
+Leave fields empty/null/false if not mentioned.
+```
+
+### Settings
+- `temperature: 0`
+- `max_tokens: 80`
+
+### Example interactions
+
+**User:** `show failed only`  
+**LLM:** `{"action":"filter","status":"FAILURE","hotfix":false,"q":"","repo":"","branch":"","sort":"","select_job":null}`
+
+**User:** `next page`  
+**LLM:** `{"action":"next"}`
+
+**User:** `clear filters`  
+**LLM:** `{"action":"clear"}`
+
+**User:** `sort by recently failed`  
+**LLM:** `{"action":"filter","status":"","hotfix":false,"q":"","repo":"","branch":"","sort":"failed","select_job":null}`
+
+### Fallback (regex — fires when LLM unavailable or times out)
+
+| Phrase | Result |
+|---|---|
+| "next", "more", "forward" | `action: next` |
+| "prev", "back", "before" | `action: prev` |
+| "clear", "reset", "all jobs" | `action: clear` |
+| "fail", "broken", "error" | `action: filter, status: FAILURE` |
+| "hotfix", "hf" | `action: filter, hotfix: true` |
+| anything else | `action: filter` |
+
+---
+
 ## Retry Logic
 
 Both `select_job` and `parse_build_request` retry once on JSON parse failure:
@@ -364,7 +447,9 @@ result = _extract_json(raw)
 | v7 | "check who build X" triggered build flow | Added `_QUERY_RE` (checked before `_BUILD_RE`) |
 | v8 | Query job picker routed to build | Added `pending_query` + `_resume_query()` |
 | v9 | "artifacts" / "artifact location of X" routed to build | Added 8 standalone and `location/path/need` artifact patterns to `_QUERY_RE` |
-| v10 — current | Stable across all tested phrases | — |
+| v10 | 10 new query actions added (build history, running builds, queue, etc.) | Extended `_QUERY_PARSE_SYSTEM` with 10 new actions + `build_number_b`/`count` fields |
+| v11 | Job browser filter conversations needed LLM support | Added `parse_job_filter_update()` + `_JOB_FILTER_SYSTEM` (Prompt 6) |
+| v12 — current | Real job names in docs replaced with generic examples | Documentation cleanup |
 
 ---
 

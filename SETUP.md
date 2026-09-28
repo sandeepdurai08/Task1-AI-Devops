@@ -15,7 +15,7 @@ Total time: ~35 minutes.
 | 4 | Jenkins LTS | 2.x | installed below |
 | 5 | MailHog | latest | installed below |
 
-> **Network:** Outbound HTTPS to `exterrollm.exterrocloud.info` required for LLM calls.
+> **Network:** Outbound HTTPS to the LLM endpoint (`LLM_URL` in `.env`) required for AI features.
 > If the endpoint uses a self-signed certificate, set `LLM_VERIFY_SSL=false` in `.env`.
 
 ---
@@ -44,8 +44,8 @@ Open `.env` and fill in each section:
 
 ### LLM
 ```env
-LLM_URL=https://exterrollm.exterrocloud.info/v1/chat/completions
-LLM_MODEL=/exterro/services/models/Qwen3-30B-A3B-Instruct-2507
+LLM_URL=https://your-llm-endpoint/v1/chat/completions
+LLM_MODEL=your-model-identifier
 LLM_API_KEY=none
 # Set to false if the endpoint uses a self-signed / internal TLS certificate
 LLM_VERIFY_SSL=false

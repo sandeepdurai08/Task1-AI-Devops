@@ -146,14 +146,24 @@ try {
 }
 
 # ─── Check 6: LLM endpoint ────────────────────────────────────────────────────
-Write-Head "Exterro LLM endpoint"
-$llmUrl = "https://exterrollm.exterrocloud.info"
+Write-Head "LLM endpoint"
+# Read LLM_URL from .env — strip path component to get base URL
+$envFile = Join-Path $PSScriptRoot "..\\.env"
+$llmUrl  = "http://localhost"   # fallback
+if (Test-Path $envFile) {
+    $llmLine = Get-Content $envFile | Where-Object { $_ -match "^LLM_URL\s*=" }
+    if ($llmLine) {
+        $rawUrl = ($llmLine -split "=", 2)[1].Trim()
+        # Strip /v1/... path to get base host URL for reachability check
+        if ($rawUrl -match "^(https?://[^/]+)") { $llmUrl = $Matches[1] }
+    }
+}
 try {
     $resp = Invoke-WebRequest -Uri $llmUrl -TimeoutSec 6 -UseBasicParsing -ErrorAction Stop
-    Write-OK "LLM endpoint is reachable"
+    Write-OK "LLM endpoint is reachable ($llmUrl)"
 } catch {
     Write-Warn "LLM endpoint unreachable: $llmUrl"
-    Write-Info "Check network/VPN access to exterrollm.exterrocloud.info"
+    Write-Info "Check LLM_URL in .env and network/VPN access"
 }
 
 # ─── Summary ──────────────────────────────────────────────────────────────────

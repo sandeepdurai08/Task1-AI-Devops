@@ -338,8 +338,8 @@ Two-layer analysis: LLM (20s hard timeout) then regex fallback.
 ## LLM Configuration
 
 ```env
-LLM_URL=https://exterrollm.exterrocloud.info/v1/chat/completions
-LLM_MODEL=/exterro/services/models/Qwen3-30B-A3B-Instruct-2507
+LLM_URL=https://your-llm-endpoint/v1/chat/completions   # set in .env
+LLM_MODEL=your-model-identifier                          # set in .env
 LLM_API_KEY=none
 LLM_VERIFY_SSL=false          # false = skip TLS cert check (self-signed internal cert)
 ```
