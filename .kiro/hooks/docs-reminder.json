@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Remind to update docs after code changes",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(py)$",
+      "action": {
+        "type": "agent",
+        "prompt": "A Python source file was just saved. Check if the change adds, removes, or significantly modifies any public-facing behaviour (new routes, new LLM prompts, new Jenkins API calls, new intent keywords, new .env variables, changed defaults). If yes, note which of these docs likely need updating: README.md, SETUP.md, docs/ARCHITECTURE.md, docs/PROMPTS.md. Only flag genuine changes — skip minor refactors and bug fixes."
+      }
+    }
+  ]
+}

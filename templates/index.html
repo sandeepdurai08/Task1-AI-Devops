@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuildBot — Exterro DevOps AI</title>
+  <!-- Browser tab icon -->
+  <link rel="icon"            type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="shortcut icon"   type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" href="/static/favicon.svg" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-left">
+      <button id="sidebar-toggle" class="icon-btn" title="Toggle chat history" aria-label="Toggle sidebar">
+        ☰
+      </button>
+
+      <!-- BuildBot DevOps + Jenkins SVG Logo -->
+      <svg class="logo-svg" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <!-- Jenkins red → purple → DevOps indigo diagonal gradient -->
+          <linearGradient id="bgMain" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#C0392B"/>
+            <stop offset="48%"  stop-color="#8E44AD"/>
+            <stop offset="100%" stop-color="#4f46e5"/>
+          </linearGradient>
+          <!-- Pipeline node gradient: red → indigo -->
+          <linearGradient id="pipeGrad" x1="0" y1="0" x2="40" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#E74C3C"/>
+            <stop offset="100%" stop-color="#818cf8"/>
+          </linearGradient>
+          <!-- Gear face gradient -->
+          <linearGradient id="gearFace" x1="8" y1="14" x2="32" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stop-color="#C0392B" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.9"/>
+          </linearGradient>
+          <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="1.4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#00000033"/>
+          </filter>
+        </defs>
+
+        <!-- ── Background rounded square ───────────────────────────── -->
+        <rect x="1" y="1" width="38" height="38" rx="10" fill="url(#bgMain)" filter="url(#dropShadow)"/>
+        <!-- Subtle inner highlight border -->
+        <rect x="1.5" y="1.5" width="37" height="37" rx="9.5" fill="none" stroke="white" stroke-width="0.6" opacity="0.18"/>
+
+        <!-- ── CI/CD Pipeline strip (top band) ─────────────────────── -->
+        <!-- Left node: Jenkins red (CI) -->
+        <circle cx="9"  cy="9.5" r="3" fill="#E74C3C" filter="url(#softGlow)"/>
+        <circle cx="9"  cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+        <!-- Dashed connector line -->
+        <line x1="12.5" y1="9.5" x2="27.5" y2="9.5"
+              stroke="white" stroke-width="1.2" stroke-dasharray="2.5 2" opacity="0.55"
+              stroke-linecap="round"/>
+        <!-- Pipeline arrow head -->
+        <polyline points="25.5,7.5 28,9.5 25.5,11.5"
+                  fill="none" stroke="white" stroke-width="1.1" stroke-linecap="round"
+                  stroke-linejoin="round" opacity="0.7"/>
+        <!-- Right node: DevOps indigo (CD) -->
+        <circle cx="31" cy="9.5" r="3" fill="#818cf8" filter="url(#softGlow)"/>
+        <circle cx="31" cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+
+        <!-- ── Gear (DevOps Automation) centered at 19,25 ──────────── -->
+        <g transform="translate(19,25)">
+          <!-- 8 gear teeth: each rect rotated 45° apart, pointing outward -->
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(45)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(90)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(135)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(180)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(225)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(270)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(315)"/>
+          <!-- Gear body disk -->
+          <circle cx="0" cy="0" r="8.5" fill="url(#gearFace)"/>
+          <!-- Gear body rim -->
+          <circle cx="0" cy="0" r="8.5" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <!-- Inner hub circle -->
+          <circle cx="0" cy="0" r="4.2" fill="white" opacity="0.12"/>
+          <circle cx="0" cy="0" r="4.2" fill="none" stroke="white" stroke-width="0.8" opacity="0.5"/>
+          <!-- Hub center dot -->
+          <circle cx="0" cy="0" r="1.8" fill="white" opacity="0.7"/>
+
+          <!-- ">" pipeline symbol inside gear -->
+          <polyline points="-2.5,-2.8 0.5,0 -2.5,2.8"
+                    fill="none" stroke="white" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+          <polyline points="0.5,-2.8 3.5,0 0.5,2.8"
+                    fill="none" stroke="white" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+        </g>
+
+        <!-- ── Jenkins "J" badge — small gear (bottom-right) ─────────── -->
+        <g transform="translate(30,30)">
+          <!-- 6 gear teeth -->
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(60)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(120)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(180)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(240)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(300)"/>
+          <!-- Gear body -->
+          <circle cx="0" cy="0" r="7" fill="#C0392B"/>
+          <circle cx="0" cy="0" r="7" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <!-- Inner hub ring -->
+          <circle cx="0" cy="0" r="3" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <!-- J -->
+          <text x="0.3" y="5" text-anchor="middle"
+                font-size="12" font-weight="900" fill="white"
+                font-family="Georgia,'Times New Roman',serif">J</text>
+        </g>
+      </svg>
+
+      <div class="logo-text">
+        <span class="logo-title"><span class="logo-build">Build</span><span class="logo-bot">Bot</span></span>
+        <span class="logo-sub">Exterro DevOps AI</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- Jenkins status pill -->
+      <span class="status-pill" id="pill-jenkins" title="Checking Jenkins…">
+        <span class="pill-dot checking"></span>
+        <span class="pill-label">Jenkins</span>
+      </span>
+      <!-- LLM status pill -->
+      <span class="status-pill" id="pill-llm" title="Checking LLM…">
+        <span class="pill-dot checking"></span>
+        <span class="pill-label">LLM</span>
+      </span>
+      <!-- Recheck button -->
+      <button id="recheck-btn" class="recheck-btn" title="Recheck connections" aria-label="Recheck Jenkins and LLM connectivity">
+        ↺
+      </button>
+      <!-- Admin panel link — only visible to admin role -->
+      {% if user and user.role == 'admin' %}
+      <a href="/admin/users" class="admin-nav-btn" title="User management" aria-label="Manage users">
+        👥 Users
+      </a>
+      {% endif %}
+      <!-- Current user badge -->
+      {% if user %}
+      <div class="user-badge" title="{{ user.role | capitalize }}">
+        <span class="user-avatar">{{ user.display_name[0] | upper }}</span>
+        <span class="user-name">{{ user.display_name }}</span>
+        <span class="user-role-tag">{{ user.role }}</span>
+        <a href="/logout" class="logout-btn" title="Sign out" aria-label="Sign out">⏏</a>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── Layout ──────────────────────────────────────────────────────────── -->
+  <div class="layout" id="layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+    <aside id="sidebar" class="sidebar" aria-label="Chat history">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Chats</span>
+        <button id="new-chat-btn" class="new-chat-btn" title="New chat" aria-label="Start new chat">
+          + New
+        </button>
+      </div>
+      <div id="chat-list" class="chat-list" role="listbox" aria-label="Chat sessions"></div>
+    </aside>
+
+    <!-- ── Main chat area ───────────────────────────────────────────────── -->
+    <div class="chat-main">
+      <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+      <footer class="input-bar">
+        <input
+          id="user-input"
+          type="text"
+          placeholder="Type a build request — e.g. hotfix build from https://github.com/acme/repo branch hotfix/PAY-1"
+          autocomplete="off"
+          aria-label="Build request"
+        />
+        <button id="send-btn" aria-label="Send">Send</button>
+      </footer>
+    </div>
+
+  </div><!-- /.layout -->
+
+  <!-- ── Parameter row templates ─────────────────────────────────────────── -->
+
+  <template id="tpl-string-param">
+    <div class="param-row" data-param-name="" data-param-type="StringParameterDefinition">
+      <label class="param-label">
+        <span class="param-name"></span>
+        <span class="param-source badge"></span>
+      </label>
+      <p class="param-desc"></p>
+      <input type="text" class="param-input string-input" />
+    </div>
+  </template>
+
+  <template id="tpl-bool-param">
+    <div class="param-row" data-param-name="" data-param-type="BooleanParameterDefinition">
+      <label class="param-label">
+        <span class="param-name"></span>
+        <span class="param-source badge"></span>
+      </label>
+      <p class="param-desc"></p>
+      <label class="bool-toggle">
+        <input type="checkbox" class="bool-checkbox" />
+        <span class="bool-label-text">Enable</span>
+      </label>
+    </div>
+  </template>
+
+  <template id="tpl-choice-param">
+    <div class="param-row" data-param-name="" data-param-type="ChoiceParameterDefinition">
+      <label class="param-label">
+        <span class="param-name"></span>
+        <span class="param-source badge"></span>
+      </label>
+      <p class="param-desc"></p>
+      <input type="text" class="param-input choice-text"
+             placeholder="Type comma-separated or click below…"
+             aria-label="Comma-separated selection" />
+      <div class="choice-list"></div>
+    </div>
+  </template>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  STATE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // chats: { chatId: { title, messages: [{side, html}] } }
+  let chats       = {};
+  let activeChatId = null;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  LOCALSTORAGE — message persistence across page refresh
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const LS_MSGS   = id => `bb_msgs_${id}`;
+  const LS_TITLE  = id => `bb_title_${id}`;
+  const LS_CHATS  = "bb_chat_ids";
+  const LS_BUILD  = chatId => `bb_build_${chatId}`;   // ← active build per chat
+
+  function _saveChatIndex() {
+    // Persist the ordered list of current chat IDs to localStorage
+    try {
+      const ids = Object.keys(chats).filter(k => !k.startsWith("_"));
+      localStorage.setItem(LS_CHATS, JSON.stringify(ids));
+    } catch(e) {}
+  }
+
+  function _loadChatIndex() {
+    // Restore chat IDs and titles from localStorage (server-independent)
+    try {
+      const raw = localStorage.getItem(LS_CHATS);
+      if (!raw) return;
+      const ids = JSON.parse(raw);
+      ids.forEach(id => {
+        if (!chats[id]) {   // don't overwrite if server already loaded it
+          const title = localStorage.getItem(LS_TITLE(id)) || "Chat";
+          const msgs  = _loadFromStorage(id);
+          chats[id] = { title, messages: msgs };
+        }
+      });
+    } catch(e) {}
+  }
+
+  function _saveToStorage(chatId) {
+    if (!chatId || !chats[chatId]) return;
+    try {
+      localStorage.setItem(LS_MSGS(chatId),  JSON.stringify(chats[chatId].messages));
+      localStorage.setItem(LS_TITLE(chatId), chats[chatId].title || "New chat");
+    } catch(e) { /* storage quota exceeded — ignore */ }
+  }
+
+  function _loadFromStorage(chatId) {
+    try {
+      const raw = localStorage.getItem(LS_MSGS(chatId));
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+  }
+
+  function _clearStorage(chatId) {
+    try {
+      localStorage.removeItem(LS_MSGS(chatId));
+      localStorage.removeItem(LS_TITLE(chatId));
+    } catch(e) {}
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SECURITY HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Read the CSRF token from the cookie set by Flask-WTF.
+   * Must be sent as X-CSRFToken on every state-changing fetch call.
+   */
+  function getCsrfToken() {
+    const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  /** Returns headers for POST / PATCH / DELETE / PUT fetch calls. */
+  function csrfHeaders() {
+    return { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() };
+  }
+
+  /**
+   * Minimal inline HTML sanitizer — prevents XSS when bot messages are
+   * replayed from localStorage into bubble.innerHTML.
+   *
+   * Allows only a safe allowlist of tags and attributes.
+   * Strips all event handlers (on*), javascript: URIs, and unknown tags.
+   */
+  const _SAFE_TAGS = new Set([
+    "a","b","i","em","strong","code","pre","p","ul","ol","li",
+    "br","span","div","h3","h4","blockquote","hr",
+  ]);
+  const _SAFE_ATTRS = {
+    a:    ["href","target","rel"],
+    code: ["class"],
+    pre:  ["class"],
+    span: ["class","style"],
+    div:  ["class"],
+  };
+  const _URI_ATTRS = new Set(["href","src","action","formaction"]);
+
+  function sanitizeHtml(dirty) {
+    if (!dirty) return "";
+    try {
+      const doc = new DOMParser().parseFromString(`<div>${dirty}</div>`, "text/html");
+      function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE)    return node.cloneNode();
+        if (node.nodeType !== Node.ELEMENT_NODE) return null;
+        const tag = node.tagName.toLowerCase();
+        if (!_SAFE_TAGS.has(tag)) return document.createTextNode(node.textContent);
+        const el      = document.createElement(tag);
+        const allowed = _SAFE_ATTRS[tag] || [];
+        for (const attr of node.attributes) {
+          const n = attr.name.toLowerCase(); const v = attr.value;
+          if (n.startsWith("on")) continue;
+          if (!allowed.includes(n)) continue;
+          if (_URI_ATTRS.has(n) && /^\s*javascript:/i.test(v)) continue;
+          el.setAttribute(n, v);
+        }
+        if (tag === "a") { el.setAttribute("target","_blank"); el.setAttribute("rel","noopener noreferrer"); }
+        for (const child of node.childNodes) { const c = walk(child); if (c) el.appendChild(c); }
+        return el;
+      }
+      const root = doc.body && doc.body.firstChild;
+      if (!root) return escapeHtml(dirty);   // fallback if DOMParser fails
+      const out = document.createElement("div");
+      for (const child of root.childNodes) { const c = walk(child); if (c) out.appendChild(c); }
+      return out.innerHTML;
+    } catch(e) {
+      console.warn("sanitizeHtml failed, using escapeHtml fallback:", e);
+      return escapeHtml(dirty);   // safe fallback — never silently hides content
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DOM REFS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const messagesEl    = document.getElementById("messages");
+  const inputEl       = document.getElementById("user-input");
+  const sendBtnEl     = document.getElementById("send-btn");
+  const chatListEl    = document.getElementById("chat-list");
+  const layout        = document.getElementById("layout");
+
+  // ── Boot-time DOM check ───────────────────────────────────────────────────
+  console.log("[BuildBot] DOM refs:", {
+    messagesEl: !!messagesEl,
+    inputEl:    !!inputEl,
+    sendBtnEl:  !!sendBtnEl,
+    chatListEl: !!chatListEl,
+    layout:     !!layout,
+  });
+  if (!messagesEl) console.error("[BuildBot] FATAL: #messages element not found in DOM");
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  UTILS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+  function setInputEnabled(on) {
+    inputEl.disabled   = !on;
+    sendBtnEl.disabled = !on;
+  }
+
+  function escapeHtml(t) {
+    return String(t)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function escapeAndLinkify(text) {
+    const e = escapeHtml(text);
+    return e.replace(/(https?:\/\/[^\s<>"]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  }
+
+  function stripMd(t) {
+    // For build card status messages, render basic markdown inline
+    return t
+      .replace(/\*\*(.+?)\*\*/g, "$1")   // strip bold markers (plain text context)
+      .replace(/`([^`]+)`/g, "$1");        // strip code markers
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SIDEBAR — CHAT SESSION MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Create a brand-new chat session on the server and switch to it. */
+  async function createNewChat() {
+    try {
+      const resp = await fetch("/sessions", { method: "POST", headers: csrfHeaders() });
+      if (resp.redirected || (resp.headers.get("content-type") || "").includes("text/html")) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+      const data = await resp.json();
+      if (!data.chat_id) throw new Error("No chat_id in response");
+      chats[data.chat_id] = { title: "New chat", messages: _loadFromStorage(data.chat_id) };
+      _saveChatIndex();   // persist new chat ID to localStorage
+      renderSidebar();
+      switchToChat(data.chat_id);
+    } catch(e) {
+      console.error("createNewChat failed:", e);
+      // Show inline error rather than silent failure
+      if (messagesEl) {
+        const err = document.createElement("div");
+        err.className = "message bot";
+        err.innerHTML = `<div class="bubble" style="border-color:#fecaca;background:#fef2f2;color:#dc2626">
+          ❌ Could not start a chat session. Please <a href="/login">sign in again</a> or refresh the page.
+        </div>`;
+        messagesEl.appendChild(err);
+      }
+    }
+  }
+
+  /** Switch the active chat — saves current messages, loads new ones. */
+  function switchToChat(chatId) {
+    activeChatId = chatId;
+    messagesEl.innerHTML = "";
+
+    const c = chats[chatId];
+    if (!c) return;
+
+    if (c.messages.length === 0) {
+      appendWelcome();
+    } else {
+      // Replay stored messages — pass persist=false to avoid doubling the array
+      c.messages.forEach(m => _appendRawBubble(m.side, m.html, false));
+    }
+
+    renderSidebar();
+    setInputEnabled(true);
+    inputEl.focus();
+    scrollBottom();
+  }
+
+  /** Re-render the sidebar list. */
+  function renderSidebar() {
+    chatListEl.innerHTML = "";
+    const ids = Object.keys(chats).reverse();
+    if (ids.length === 0) {
+      chatListEl.innerHTML = '<p class="chat-list-empty">No chats yet</p>';
+      return;
+    }
+    ids.forEach(id => {
+      const c   = chats[id];
+      const row = document.createElement("div");
+      row.className = "chat-item" + (id === activeChatId ? " active" : "");
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", id === activeChatId ? "true" : "false");
+      row.setAttribute("tabindex", "0");
+
+      const title = document.createElement("span");
+      title.className = "chat-item-title";
+      title.textContent = c.title || "New chat";
+
+      const del = document.createElement("button");
+      del.className = "chat-item-delete";
+      del.title = "Delete chat";
+      del.setAttribute("aria-label", "Delete chat: " + (c.title || "New chat"));
+      del.textContent = "×";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await fetch(`/sessions/${id}`, { method: "DELETE", headers: csrfHeaders() });
+        _clearStorage(id);   // remove persisted messages
+        delete chats[id];
+        _saveChatIndex();    // update persistent chat index
+        if (activeChatId === id) {
+          const remaining = Object.keys(chats);
+          if (remaining.length > 0) switchToChat(remaining[0]);
+          else createNewChat();
+        } else {
+          renderSidebar();
+        }
+      });
+
+      row.appendChild(title);
+      row.appendChild(del);
+      row.addEventListener("click", () => switchToChat(id));
+      row.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); switchToChat(id); }
+      });
+      chatListEl.appendChild(row);
+    });
+  }
+
+  /** Auto-title a chat from its first user message. */
+  async function autoTitleChat(chatId, firstMessage) {
+    const title = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? "…" : "");
+    if (chats[chatId]) chats[chatId].title = title;
+    renderSidebar();
+    _saveChatIndex();    // persist updated title in chat index
+    localStorage.setItem(LS_TITLE(chatId), title);   // persist title
+    await fetch(`/sessions/${chatId}`, {
+      method:  "PATCH",
+      headers: csrfHeaders(),
+      body:    JSON.stringify({ title }),
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  STATUS INDICATORS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const STATUS_POLL_MS = 30_000;
+
+  function _setPill(id, status) {   // status: "ok" | "error" | "checking"
+    const pill = document.getElementById(id);
+    if (!pill) return;
+    const dot   = pill.querySelector(".pill-dot");
+    dot.className = `pill-dot ${status}`;
+    const label = { ok:"ok", error:"error", checking:"…" }[status] || status;
+    pill.title  = `${id === "pill-jenkins" ? "Jenkins" : "LLM"}: ${label}`;
+  }
+
+  async function checkStatus() {
+    _setPill("pill-jenkins", "checking");
+    _setPill("pill-llm",     "checking");
+    const btn = document.getElementById("recheck-btn");
+    if (btn) { btn.classList.add("spinning"); btn.disabled = true; }
+    try {
+      const resp = await fetch("/status");
+      const data = await resp.json();
+      _setPill("pill-jenkins", data.jenkins);
+      _setPill("pill-llm",     data.llm);
+    } catch {
+      _setPill("pill-jenkins", "error");
+      _setPill("pill-llm",     "error");
+    } finally {
+      if (btn) { btn.classList.remove("spinning"); btn.disabled = false; }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  WELCOME MESSAGE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function appendWelcome() {
+    // Welcome message is a static trusted string — bypass sanitizeHtml entirely
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    // Use textContent / DOM building instead of innerHTML for full safety
+    const p1 = document.createElement("p");
+    p1.innerHTML = "👋 Hi! I'm <strong>BuildBot</strong>. Tell me what to build, for example:";
+    const ul = document.createElement("ul");
+    [
+      "hotfix build from https://github.com/acme/payments-api, branch hotfix/PAY-4821",
+      "build release/2.3.1 from https://github.com/acme/repo, modules: Core, Api",
+    ].forEach(txt => { const li = document.createElement("li"); const em = document.createElement("em"); em.textContent = txt; li.appendChild(em); ul.appendChild(li); });
+    const p2 = document.createElement("p");
+    p2.innerHTML = "I'll extract the details, confirm the parameters, and trigger Jenkins once you click <strong>Build Now</strong>.";
+    bubble.appendChild(p1); bubble.appendChild(ul); bubble.appendChild(p2);
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  MESSAGE RENDERING
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Append a bubble with raw HTML content.
+   * @param persist  If true, store in the active chat's messages array.
+   * @returns  The bubble element.
+   */
+  function _appendRawBubble(side, html, persist = true) {
+    const wrapper = document.createElement("div");
+    wrapper.className = `message ${side}`;
+
+    // Bot messages get a small avatar
+    if (side === "bot") {
+      const avatar = document.createElement("div");
+      avatar.className = "bot-avatar";
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.innerHTML = `<svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="avBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#C0392B"/><stop offset="48%" stop-color="#8E44AD"/><stop offset="100%" stop-color="#4f46e5"/>
+          </linearGradient>
+          <linearGradient id="avGear" x1="8" y1="14" x2="32" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#C0392B" stop-opacity="0.9"/><stop offset="100%" stop-color="#4f46e5" stop-opacity="0.9"/>
+          </linearGradient>
+        </defs>
+        <rect x="1" y="1" width="38" height="38" rx="10" fill="url(#avBg)"/>
+        <circle cx="9"  cy="9.5" r="3"   fill="#E74C3C"/>
+        <circle cx="9"  cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+        <line x1="12.5" y1="9.5" x2="27.5" y2="9.5" stroke="white" stroke-width="1.2" stroke-dasharray="2.5 2" opacity="0.55" stroke-linecap="round"/>
+        <polyline points="25.5,7.5 28,9.5 25.5,11.5" fill="none" stroke="white" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+        <circle cx="31" cy="9.5" r="3"   fill="#818cf8"/>
+        <circle cx="31" cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+        <g transform="translate(19,25)">
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(45)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(90)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(135)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(180)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(225)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(270)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(315)"/>
+          <circle cx="0" cy="0" r="8.5" fill="url(#avGear)"/>
+          <circle cx="0" cy="0" r="4.2" fill="none" stroke="white" stroke-width="0.8" opacity="0.5"/>
+          <circle cx="0" cy="0" r="1.8" fill="white" opacity="0.7"/>
+          <polyline points="-2.5,-2.8 0.5,0 -2.5,2.8" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        </g>
+        <g transform="translate(30,30)">
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(60)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(120)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(180)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(240)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(300)"/>
+          <circle cx="0" cy="0" r="7" fill="#C0392B"/>
+          <circle cx="0" cy="0" r="7" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <circle cx="0" cy="0" r="3" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <text x="0.3" y="5" text-anchor="middle" font-size="12" font-weight="900" fill="white" font-family="Georgia,serif">J</text>
+        </g>
+      </svg>`;
+      wrapper.appendChild(avatar);
+    }
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = side === "bot" ? sanitizeHtml(html) : html;  // sanitize bot HTML; user msgs already escaped
+    wrapper.appendChild(bubble);
+    if (!messagesEl) {
+      console.error("_appendRawBubble: messagesEl is null — DOM not ready");
+      return bubble;
+    }
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+
+    if (persist && activeChatId && chats[activeChatId]) {
+      chats[activeChatId].messages.push({ side, html });
+      _saveToStorage(activeChatId);   // persist to localStorage on every message
+    }
+    return bubble;
+  }
+
+  /** Simple markdown → HTML converter for bot messages. */
+  function renderMarkdown(text) {
+    return text
+      // Fenced code blocks: ```...``` → <pre class="md-code-block"><code>
+      .replace(/```([\s\S]*?)```/g, (_, code) =>
+        `<pre class="md-code-block"><code>${escapeHtml(code.trimStart())}</code></pre>`)
+      // Bold: **text** → <strong>
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      // Inline code: `text` → <code>
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      // Italic: *text* → <em>  (after bold so ** doesn't interfere)
+      .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+      // Line breaks (skip if already inside a pre block placeholder)
+      .replace(/\n/g, "<br>");
+  }
+
+  /** Append a plain text bubble (escaped + linkified + markdown rendered). */
+  function appendTextBubble(side, text, persist = true) {
+    let html;
+    if (side === "bot") {
+      // Bot messages: render markdown then sanitize
+      const mdHtml = renderMarkdown(escapeHtml(text));
+      // Re-linkify after markdown (URLs might be in the text)
+      const linked = mdHtml.replace(/(https?:\/\/[^\s<>"]+)/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+      html = linked;
+    } else {
+      html = escapeAndLinkify(text);
+    }
+    return _appendRawBubble(side, html, persist);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  JOB PICKER CARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function appendJobPickerCard(jobs) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble param-card-bubble";
+
+    const container = document.createElement("div");
+    container.className = "job-picker";
+    container.setAttribute("role", "listbox");
+    container.setAttribute("aria-label", "Select a Jenkins job");
+
+    jobs.forEach(job => {
+      const card = document.createElement("div");
+      card.className = "job-card";
+      card.setAttribute("role", "option");
+      card.setAttribute("tabindex", "0");
+
+      const statusClass = _jobStatusClass(job.status || "");
+      card.innerHTML = `
+        <div class="job-card-main">
+          <span class="job-card-name">${escapeHtml(job.name)}</span>
+          <span class="job-card-status ${statusClass}">${escapeHtml(job.status || "unknown")}</span>
+        </div>
+        ${job.description ? `<p class="job-card-desc">${escapeHtml(job.description)}</p>` : ""}`;
+
+      const select = () => {
+        container.querySelectorAll(".job-card").forEach(c => {
+          c.classList.remove("selected");
+          c.style.pointerEvents = "none";
+          c.setAttribute("tabindex", "-1");
+        });
+        card.classList.add("selected");
+        appendTextBubble("user", `▶ Selected: ${job.name}`);
+        setInputEnabled(false);
+        postChat({ type: "job_select", job_name: job.name });
+      };
+
+      card.addEventListener("click", select);
+      card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }});
+      container.appendChild(card);
+    });
+
+    bubble.appendChild(container);
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  JOB BROWSER CARD  (paginated, filterable, conversation-driven)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function appendJobBrowserCard(browserData) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble param-card-bubble";
+    bubble.style.padding = "0";
+    bubble.style.overflow = "hidden";
+
+    const browser = document.createElement("div");
+    browser.className = "job-browser";
+
+    const total    = browserData.total || 0;
+    const page     = browserData.page  || 1;
+    const perPage  = browserData.per_page || 20;
+    const start    = (page - 1) * perPage + 1;
+    const end      = Math.min(start + perPage - 1, total);
+    const totalPgs = browserData.total_pages || 1;
+
+    // ── Header: count + sort ─────────────────────────────────────────────────
+    const header = document.createElement("div");
+    header.className = "job-browser-header";
+    const countEl = document.createElement("span");
+    countEl.className = "job-browser-count";
+    countEl.textContent = total === 0
+      ? "No jobs found"
+      : `Showing ${start}–${end} of ${total} job${total !== 1 ? "s" : ""}`;
+    header.appendChild(countEl);
+
+    const sortWrap = document.createElement("div");
+    sortWrap.className = "job-browser-sort";
+    const sortLabel = document.createElement("label");
+    sortLabel.textContent = "Sort:";
+    sortLabel.style.fontSize = "0.72rem";
+    sortWrap.appendChild(sortLabel);
+    const sortSel = document.createElement("select");
+    sortSel.setAttribute("aria-label", "Sort jobs");
+    [["name","Name"],["status","Status"],["failed","Recently Failed"],["duration","Duration"]]
+      .forEach(([val, label]) => {
+        const opt = document.createElement("option");
+        opt.value = val; opt.textContent = label;
+        opt.selected = (browserData.sort || "name") === val;
+        sortSel.appendChild(opt);
+      });
+    sortSel.addEventListener("change", () => {
+      postChat({ type: "job_browser_sort", sort: sortSel.value });
+    });
+    sortWrap.appendChild(sortSel);
+    header.appendChild(sortWrap);
+    browser.appendChild(header);
+
+    // ── Active filter chips ──────────────────────────────────────────────────
+    const af = browserData.active_filters || {};
+    if (Object.keys(af).length > 0) {
+      const chips = document.createElement("div");
+      chips.className = "job-browser-chips";
+      const addChip = (label, filterKey) => {
+        const chip = document.createElement("span");
+        chip.className = "job-browser-chip";
+        chip.innerHTML = `${escapeHtml(label)} <span class="chip-x" title="Remove filter" aria-label="Remove ${escapeHtml(label)} filter">×</span>`;
+        chip.querySelector(".chip-x").addEventListener("click", () => {
+          postChat({ type: "message", message: `remove ${filterKey} filter` });
+        });
+        chips.appendChild(chip);
+      };
+      if (af.status) addChip(`Status: ${af.status}`, "status");
+      if (af.hotfix) addChip("Hotfix only", "hotfix");
+      if (af.q)      addChip(`Search: "${af.q}"`, "search");
+      if (af.repo)   addChip(`Repo: ${af.repo}`, "repo");
+      if (af.branch) addChip(`Branch: ${af.branch}`, "branch");
+
+      const clearBtn = document.createElement("span");
+      clearBtn.className = "job-browser-chip-clear";
+      clearBtn.textContent = "Clear all";
+      clearBtn.setAttribute("role", "button");
+      clearBtn.setAttribute("tabindex", "0");
+      clearBtn.addEventListener("click", () => {
+        postChat({ type: "message", message: "clear filters" });
+      });
+      clearBtn.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clearBtn.click(); }
+      });
+      chips.appendChild(clearBtn);
+      browser.appendChild(chips);
+    }
+
+    // ── Job list ─────────────────────────────────────────────────────────────
+    const listEl = document.createElement("div");
+    listEl.className = "job-browser-list";
+    listEl.setAttribute("role", "listbox");
+    listEl.setAttribute("aria-label", "Jenkins jobs");
+
+    const jobs = browserData.jobs || [];
+    if (jobs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "job-browser-empty";
+      empty.textContent = "No jobs found for these filters.";
+      listEl.appendChild(empty);
+    } else {
+      jobs.forEach(job => {
+        const card = document.createElement("div");
+        card.className = "job-card";
+        card.setAttribute("role", "option");
+        card.setAttribute("tabindex", "0");
+
+        const lb = job.last_build || {};
+        const statusClass = _jobStatusClass(job.status || "");
+        const buildNumStr = lb.number ? `#${lb.number}` : "—";
+        const isFailed    = lb.result === "FAILURE" || lb.result === "UNSTABLE";
+        const durMs       = lb.duration_ms || 0;
+        const durStr      = durMs > 0
+          ? (durMs >= 60000
+            ? `${Math.floor(durMs/60000)}m ${Math.floor((durMs%60000)/1000)}s`
+            : `${Math.floor(durMs/1000)}s`)
+          : "—";
+
+        card.innerHTML = `
+          <div class="job-card-main">
+            <span class="job-card-name">${escapeHtml(job.name)}</span>
+            <span class="job-card-status ${statusClass}">${escapeHtml(job.status || "unknown")}</span>
+          </div>
+          ${job.description ? `<p class="job-card-desc">${escapeHtml(job.description)}</p>` : ""}
+          <div class="job-card-meta">
+            <span class="job-card-build ${isFailed ? "failed" : ""}">${escapeHtml(buildNumStr)}</span>
+            <span class="job-card-duration">${escapeHtml(durStr)}</span>
+          </div>`;
+
+        const select = () => {
+          listEl.querySelectorAll(".job-card").forEach(c => {
+            c.classList.remove("selected");
+            c.style.pointerEvents = "none";
+            c.setAttribute("tabindex", "-1");
+          });
+          card.classList.add("selected");
+          appendTextBubble("user", `▶ Selected: ${job.name}`);
+          setInputEnabled(false);
+          postChat({ type: "job_select", job_name: job.name });
+        };
+        card.addEventListener("click", select);
+        card.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }
+        });
+        listEl.appendChild(card);
+      });
+    }
+    browser.appendChild(listEl);
+
+    // ── Pagination ───────────────────────────────────────────────────────────
+    if (totalPgs > 1) {
+      const pag = document.createElement("div");
+      pag.className = "job-browser-pagination";
+
+      const mkBtn = (label, pageNum, isActive, disabled) => {
+        const btn = document.createElement("button");
+        btn.className = "jb-page-btn" + (isActive ? " active" : "");
+        btn.textContent = label;
+        btn.disabled    = disabled;
+        btn.setAttribute("aria-label", `Page ${pageNum}`);
+        if (!disabled && !isActive) {
+          btn.addEventListener("click", () => {
+            postChat({ type: "job_browser_page", page: pageNum });
+          });
+        }
+        return btn;
+      };
+
+      pag.appendChild(mkBtn("←", page - 1, false, page <= 1));
+
+      const pagesToShow = new Set(
+        [1, totalPgs, page, page - 1, page + 1].filter(p => p >= 1 && p <= totalPgs)
+      );
+      const sortedPages = [...pagesToShow].sort((a, b) => a - b);
+      let lastShown = 0;
+      sortedPages.forEach(p => {
+        if (lastShown && p - lastShown > 1) {
+          const ell = document.createElement("span");
+          ell.className = "jb-page-ellipsis";
+          ell.textContent = "…";
+          pag.appendChild(ell);
+        }
+        pag.appendChild(mkBtn(String(p), p, p === page, false));
+        lastShown = p;
+      });
+      pag.appendChild(mkBtn("→", page + 1, false, page >= totalPgs));
+      browser.appendChild(pag);
+    }
+
+    // ── Hint ─────────────────────────────────────────────────────────────────
+    const hint = document.createElement("div");
+    hint.className = "job-browser-hint";
+    hint.textContent = 'Type: "next page", "failed only", "hotfix", "sort by failed", "clear filters"…';
+    browser.appendChild(hint);
+
+    bubble.appendChild(browser);
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  function _jobStatusClass(s) {
+    s = s.toLowerCase();
+    if (s.includes("success")) return "status-success";
+    if (s.includes("fail"))    return "status-failed";
+    if (s.includes("build"))   return "status-building";
+    if (s.includes("unstable"))return "status-warning";
+    return "status-unknown";
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PARAM CARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function appendParamCard(paramCard) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble param-card-bubble";
+
+    const card = document.createElement("div");
+    card.className = "param-card";
+
+    paramCard.forEach(p => {
+      const row = buildParamRow(p);
+      if (row) card.appendChild(row);
+    });
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "card-btn-row";
+    const btn = document.createElement("button");
+    btn.className = "build-now-btn";
+    btn.textContent = "⚙ Build Now";
+    btn.setAttribute("aria-label", "Confirm and trigger build");
+    btn.addEventListener("click", () => submitParamCard(card, paramCard, btn));
+    btnRow.appendChild(btn);
+    card.appendChild(btnRow);
+
+    bubble.appendChild(card);
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  // ── Info card (query results: artifact file lists) ────────────────────────
+  // Most query results (job lists, view lists, etc.) come back as markdown text
+  // in the reply bubble. info_card is reserved for artifact lists with download links.
+  // Shape: { title: str, items: [{name: str, url: str}] }
+
+  function appendInfoCard(card) {
+    if (!card) return;
+    const wrapper   = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble    = document.createElement("div");
+    bubble.className  = "bubble param-card-bubble";
+
+    const container = document.createElement("div");
+    container.className = "info-card";
+
+    if (card.title) {
+      const h = document.createElement("div");
+      h.className   = "info-card-title";
+      h.textContent = card.title;
+      container.appendChild(h);
+    }
+
+    if (Array.isArray(card.items) && card.items.length) {
+      const ul = document.createElement("ul");
+      ul.className = "info-card-list";
+      card.items.forEach(item => {
+        const li = document.createElement("li");
+        if (item.url) {
+          const a    = document.createElement("a");
+          a.href     = item.url;
+          a.target   = "_blank";
+          a.rel      = "noopener noreferrer";
+          a.className = "info-card-link";
+          const code   = document.createElement("code");
+          code.textContent = item.name;
+          a.appendChild(code);
+          const badge    = document.createElement("span");
+          badge.className = "info-card-dl";
+          badge.textContent = "⬇ Download";
+          a.appendChild(badge);
+          li.appendChild(a);
+        } else {
+          li.textContent = item.name || "";
+        }
+        ul.appendChild(li);
+      });
+      container.appendChild(ul);
+    }
+
+    bubble.appendChild(container);
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  // ── Param row builders ────────────────────────────────────────────────────
+
+  function buildParamRow(param) {
+    switch (param.type) {
+      case "StringParameterDefinition":  return buildStringRow(param);
+      case "BooleanParameterDefinition": return buildBoolRow(param);
+      case "ChoiceParameterDefinition":  return buildChoiceRow(param);
+      default: return buildStringRow(param);
+    }
+  }
+
+  function cloneTemplate(id) {
+    return document.getElementById(id).content.cloneNode(true).firstElementChild;
+  }
+
+  function fillHeader(row, param) {
+    row.dataset.paramName = param.name;
+    row.querySelector(".param-name").textContent = param.name;
+    const badge = row.querySelector(".param-source");
+    badge.textContent = param.source || "";
+    badge.dataset.source = (param.source || "").replace(/\s+/g, "-");
+    const desc = row.querySelector(".param-desc");
+    if (param.description) desc.textContent = param.description;
+    else desc.remove();
+  }
+
+  function buildStringRow(param) {
+    const row = cloneTemplate("tpl-string-param");
+    fillHeader(row, param);
+    const inp = row.querySelector(".string-input");
+    inp.value = param.value || "";
+    inp.setAttribute("aria-label", param.name);
+    return row;
+  }
+
+  function buildBoolRow(param) {
+    const row = cloneTemplate("tpl-bool-param");
+    fillHeader(row, param);
+    const cb = row.querySelector(".bool-checkbox");
+    cb.checked = !!param.value;
+    const lbl = row.querySelector(".bool-label-text");
+    lbl.textContent = cb.checked ? "Enabled" : "Disabled";
+    cb.addEventListener("change", () => { lbl.textContent = cb.checked ? "Enabled" : "Disabled"; });
+    return row;
+  }
+
+  function buildChoiceRow(param) {
+    const row      = cloneTemplate("tpl-choice-param");
+    fillHeader(row, param);
+    const textInput  = row.querySelector(".choice-text");
+    const choiceList = row.querySelector(".choice-list");
+    const choices    = param.choices || [];
+    const preSelected = Array.isArray(param.value)
+      ? param.value.map(v => v.toLowerCase().trim())
+      : (param.value ? [param.value.toLowerCase().trim()] : []);
+
+    const checkboxes = [];
+    choices.forEach(choice => {
+      const lbl = document.createElement("label");
+      lbl.className = "choice-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = choice;
+      cb.checked = preSelected.includes(choice.toLowerCase().trim());
+      cb.setAttribute("aria-label", `${param.name}: ${choice}`);
+      checkboxes.push(cb);
+      const span = document.createElement("span");
+      span.textContent = choice;
+      lbl.appendChild(cb);
+      lbl.appendChild(span);
+      choiceList.appendChild(lbl);
+      cb.addEventListener("change", () => syncCbToText(checkboxes, textInput));
+    });
+
+    syncCbToText(checkboxes, textInput);
+    textInput.addEventListener("input", () => syncTextToCb(textInput, checkboxes, choices));
+    return row;
+  }
+
+  function syncCbToText(cbs, inp) {
+    inp.value = cbs.filter(c => c.checked).map(c => c.value).join(", ");
+    inp.classList.remove("invalid");
+  }
+
+  function syncTextToCb(inp, cbs, choices) {
+    const parts = inp.value.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    const lower = choices.map(c => c.toLowerCase());
+    cbs.forEach(cb => { cb.checked = parts.includes(cb.value.toLowerCase()); });
+    const bad = parts.some(p => p && !lower.includes(p));
+    inp.classList.toggle("invalid", bad);
+    inp.title = bad ? "Some values don't match available choices" : "";
+  }
+
+  function submitParamCard(cardEl, schema, btn) {
+    const collected = {};
+    schema.forEach(p => {
+      const row = cardEl.querySelector(`[data-param-name="${p.name}"]`);
+      if (!row) return;
+      switch (p.type) {
+        case "StringParameterDefinition":
+          collected[p.name] = row.querySelector(".string-input")?.value.trim() || ""; break;
+        case "BooleanParameterDefinition":
+          collected[p.name] = row.querySelector(".bool-checkbox")?.checked || false; break;
+        case "ChoiceParameterDefinition":
+          collected[p.name] = Array.from(row.querySelectorAll(".choice-list input:checked")).map(c => c.value); break;
+        default:
+          collected[p.name] = row.querySelector("input")?.value.trim() || "";
+      }
+    });
+
+    btn.disabled = true;
+    btn.textContent = "⏳ Triggering…";
+    cardEl.querySelectorAll("input,button").forEach(el => el.disabled = true);
+
+    const summary = Object.entries(collected)
+      .map(([k,v]) => `${k}=${Array.isArray(v) ? v.join(",") : v}`).join("  ·  ");
+    appendTextBubble("user", `▶ Build Now   ${summary}`);
+
+    setInputEnabled(false);
+    postChat({ type: "param_submit", params: collected });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  BUILD PROGRESS CARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const POLL_MS = 2000;   // poll every 2 seconds (was 3s)
+
+  function pollBuildStatus(jobId, jobName, resumeChatId) {
+    const card      = _createBuildCard(jobName);
+    const startTime = Date.now();
+    const ownChatId = resumeChatId || activeChatId;   // support reconnect after refresh
+
+    const timerInterval = setInterval(() => {
+      const s = Math.floor((Date.now() - startTime) / 1000);
+      const el = card.querySelector(".bc-elapsed");
+      if (el) el.textContent = s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+    }, 1000);
+
+    let lastStatus = "";
+    const pollInterval = setInterval(async () => {
+      try {
+        const r = await fetch(`/build-status/${jobId}`);
+
+        // If server returns HTML (session expired mid-build), skip this cycle
+        const ct = r.headers.get("content-type") || "";
+        if (ct.includes("text/html") || r.redirected) {
+          console.warn("[BuildBot] build-status returned HTML — session may have expired, retrying...");
+          return;   // keep polling — build is still running in the background
+        }
+
+        if (!r.ok) {
+          // Try to read the JSON body — the server sends {"status":…,"done":true}
+          // even on 404 (job not found after a server restart).
+          let errorState = { status: "unknown", message: "Build status lost — server may have restarted. Check Jenkins directly.", done: true };
+          try { const body = await r.json(); if (body && body.done) errorState = body; } catch(_) {}
+          clearInterval(pollInterval); clearInterval(timerInterval);
+          if (ownChatId) { try { localStorage.removeItem(LS_BUILD(ownChatId)); } catch(_) {} }
+          _finishBuildCard(card, errorState);
+          if (activeChatId === ownChatId) setInputEnabled(true);
+          return;
+        }
+        const state = await r.json();
+        if (state.status !== lastStatus || state.build_number) { lastStatus = state.status; _updateBuildCard(card, state); scrollBottom(); }
+        if (state.done) {
+          clearInterval(pollInterval); clearInterval(timerInterval);
+          // Clear the stored build — it's done
+          if (ownChatId) { try { localStorage.removeItem(LS_BUILD(ownChatId)); } catch(e) {} }
+          _finishBuildCard(card, state);
+          // Input was already re-enabled when the build was triggered — no action needed
+        }
+      } catch(e) {
+        // Network error — don't stop polling, just warn
+        console.warn("[BuildBot] build-status poll error:", e.message, "— retrying...");
+      }
+    }, POLL_MS);
+  }
+
+  function _createBuildCard(jobName) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble build-progress-bubble";
+    bubble.innerHTML = `
+      <div class="build-card" data-status="queuing">
+        <div class="bc-header">
+          <span class="bc-icon">⚙️</span>
+          <span class="bc-title">Build in progress</span>
+          <span class="bc-elapsed">0s</span>
+        </div>
+        <div class="bc-meta">
+          <span class="bc-job-name">${escapeHtml(jobName)}</span>
+          <span class="bc-build-num"></span>
+          <a class="bc-jenkins-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none">🔗 Open in Jenkins</a>
+        </div>
+        <div class="bc-stages">
+          <div class="bc-stage" data-stage="queuing"><span class="bc-stage-dot"></span><span class="bc-stage-label">Queuing</span></div>
+          <div class="bc-stage-connector"></div>
+          <div class="bc-stage" data-stage="building"><span class="bc-stage-dot"></span><span class="bc-stage-label">Building</span></div>
+          <div class="bc-stage-connector"></div>
+          <div class="bc-stage" data-stage="done"><span class="bc-stage-dot"></span><span class="bc-stage-label">Complete</span></div>
+        </div>
+        <div class="bc-progress-track"><div class="bc-progress-bar"></div></div>
+        <p class="bc-status-msg">Connecting to Jenkins…</p>
+      </div>`;
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+    _setStage(bubble.querySelector(".build-card"), "queuing");
+    return bubble.querySelector(".build-card");
+  }
+
+  function _updateBuildCard(card, state) {
+    const msg = card.querySelector(".bc-status-msg");
+    if (msg) msg.textContent = stripMd(state.message || "");
+    if (state.build_number) { const el = card.querySelector(".bc-build-num"); if (el) el.textContent = `Build #${state.build_number}`; }
+    if (state.build_url)    { const a  = card.querySelector(".bc-jenkins-link"); if (a) { a.href = state.build_url; a.style.display = "inline"; } }
+    const stage = {starting:"queuing",queuing:"queuing",queued:"queuing",building:"building"}[state.status];
+    if (stage) _setStage(card, stage);
+  }
+
+  function _finishBuildCard(card, state) {
+    card.dataset.status = state.status;
+    const icon    = card.querySelector(".bc-icon");
+    const jobName = card.querySelector(".bc-job-name");
+
+    // Update icon to reflect result
+    if (state.status === "success")      { if(icon) icon.textContent="✅"; }
+    else if (state.status === "failed")  { if(icon) icon.textContent="❌"; }
+    else if (state.status === "unknown") { if(icon) icon.textContent="⚠️"; }
+    else                                 { if(icon) icon.textContent="⚠️"; }
+
+    // Update job name label to include result text
+    if (jobName && state.result) {
+      jobName.textContent = `${jobName.textContent.split("—")[0].trim()} — ${state.result}`;
+    }
+
+    // "unknown" = server restarted mid-build → warn, don't show as hard failure
+    const finalResult = state.status === "success" ? "success"
+                      : state.status === "unknown"  ? "warning"
+                      : "failed";
+    _setStage(card, "done", finalResult);
+    const track = card.querySelector(".bc-progress-track");
+    if (track) track.style.display = "none";
+    const msg = card.querySelector(".bc-status-msg");
+    if (msg) msg.textContent = stripMd(state.message || "");
+
+    // ── Failure diagnosis box ─────────────────────────────────────────────────
+    if ((state.status === "failed" || state.status === "error") && state.failure_cause) {
+      const diag = document.createElement("div");
+      diag.className = "bc-diagnosis";
+      diag.innerHTML = `
+        <div class="bc-diag-cause">
+          <span class="bc-diag-icon">⚠️</span>
+          <strong>Cause:</strong> ${escapeHtml(state.failure_cause)}
+        </div>
+        ${state.failure_suggestion
+          ? `<div class="bc-diag-suggestion">
+               <span class="bc-diag-icon">💡</span>
+               ${escapeHtml(state.failure_suggestion)}
+             </div>`
+          : ""}`;
+      card.appendChild(diag);
+    }
+
+    // ── Artifact display ──────────────────────────────────────────────────────
+    /** Convert a local Windows/Unix path to a file:/// URI for use in href. */
+    function _pathToFileUri(p) {
+      // Replace backslashes, then encode but keep slashes and colons readable
+      return "file:///" + p.replace(/\\/g, "/").replace(/ /g, "%20");
+    }
+
+    if (state.selective_staging && state.staged_files?.length) {
+      // Selective: show each file as a bullet
+      const artBox = document.createElement("div");
+      artBox.className = "bc-artifact";
+      const folderUri = _pathToFileUri(state.artifact_path);
+      const fileList = state.staged_files
+        .map(f => {
+          const fileUri = _pathToFileUri(f.path);
+          return `<li><a href="${escapeHtml(fileUri)}" target="_blank" rel="noopener noreferrer"><code>${escapeHtml(f.name)}</code></a> <span class="bc-file-path">${escapeHtml(f.path)}</span></li>`;
+        })
+        .join("");
+      artBox.innerHTML =
+        `📦 Staged ${state.staged_files.length} file(s) to <a href="${escapeHtml(folderUri)}" target="_blank" rel="noopener noreferrer"><code>${escapeHtml(state.artifact_path)}</code></a>:<ul class="bc-file-list">${fileList}</ul>`;
+      if (state.not_found_files?.length) {
+        const warn = document.createElement("p");
+        warn.className = "bc-not-found";
+        warn.innerHTML = `⚠️ Not found in build output: ${state.not_found_files.map(f => `<code>${escapeHtml(f)}</code>`).join(", ")}`;
+        artBox.appendChild(warn);
+      }
+      card.appendChild(artBox);
+    } else if (state.artifact_path) {
+      // All artifacts
+      const folderUri = _pathToFileUri(state.artifact_path);
+      const a = document.createElement("p");
+      a.className = "bc-artifact";
+      a.innerHTML = `📁 Artifacts: <a href="${escapeHtml(folderUri)}" target="_blank" rel="noopener noreferrer"><code>${escapeHtml(state.artifact_path)}</code></a>`;
+      card.appendChild(a);
+    }
+
+    // ── Console tail (collapsible, shown for failed/aborted builds) ──────────
+    if (
+      (state.status === "failed" || state.status === "error") &&
+      Array.isArray(state.console_tail) && state.console_tail.length
+    ) {
+      const wrap   = document.createElement("div");
+      wrap.className = "bc-console-wrap";
+      const toggle = document.createElement("button");
+      toggle.className = "bc-console-toggle";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.textContent = `▶ Show last ${state.console_tail.length} log lines`;
+      const pre = document.createElement("pre");
+      pre.className  = "bc-console";
+      pre.style.display = "none";
+      pre.textContent   = state.console_tail.join("\n");
+      toggle.addEventListener("click", () => {
+        const visible = pre.style.display !== "none";
+        pre.style.display = visible ? "none" : "block";
+        toggle.setAttribute("aria-expanded", String(!visible));
+        toggle.textContent = (visible ? "▶ Show" : "▼ Hide")
+          + ` last ${state.console_tail.length} log lines`;
+      });
+      wrap.appendChild(toggle);
+      wrap.appendChild(pre);
+      card.appendChild(wrap);
+    }
+  }
+
+  const STAGE_ORDER = ["queuing","building","done"];
+  function _setStage(card, current, finalResult) {
+    const idx = STAGE_ORDER.indexOf(current);
+    card.querySelectorAll(".bc-stage").forEach(el => {
+      const i = STAGE_ORDER.indexOf(el.dataset.stage);
+      el.className = "bc-stage";
+      if (i < idx) el.classList.add("complete");
+      else if (i === idx) {
+        if (el.dataset.stage === "done" && finalResult) {
+          if      (finalResult === "success") el.classList.add("complete");
+          else if (finalResult === "warning") el.classList.add("warning");
+          else                                el.classList.add("failed");
+        } else el.classList.add("active");
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  TYPING INDICATOR
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function appendTypingIndicator() {
+    removeTypingIndicator();  // ensure only one exists
+    const wrapper = document.createElement("div");
+    wrapper.className = "message bot";
+    wrapper.id = "typing-indicator";
+    wrapper.setAttribute("aria-label", "BuildBot is thinking");
+    wrapper.innerHTML = `
+      <div class="bot-avatar" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 40 40" fill="none"><defs>
+          <linearGradient id="tiGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#C0392B"/>
+            <stop offset="100%" stop-color="#4f46e5"/>
+          </linearGradient></defs>
+          <rect x="1" y="1" width="38" height="38" rx="10" fill="url(#tiGrad)"/>
+          <circle cx="20" cy="20" r="10" fill="white" opacity="0.15"/>
+          <circle cx="20" cy="20" r="5" fill="white" opacity="0.5"/>
+        </svg>
+      </div>
+      <div class="bubble typing-bubble" aria-hidden="true">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>`;
+    messagesEl.appendChild(wrapper);
+    scrollBottom();
+  }
+
+  function removeTypingIndicator() {
+    document.getElementById("typing-indicator")?.remove();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SEND + RESPONSE HANDLING
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async function postChat(payload, _retryCount = 0) {
+    if (!activeChatId) { console.warn("[BuildBot] postChat: no activeChatId"); return; }
+    payload.chat_id = activeChatId;
+    console.log("[BuildBot] postChat →", payload.type, payload.message || "");
+
+    // ── Abort controller: 180s hard cap (LLM may take up to 120s + buffer) ──────
+    const controller = new AbortController();
+    const TIMEOUT_MS = 180_000;
+    const timeoutId  = setTimeout(() => controller.abort("timeout"), TIMEOUT_MS);
+
+    // ── "Still thinking…" notice after 15s (LLM is slow) ────────────────────────
+    const SLOW_WARN_MS = 15_000;
+    const slowWarnTimer = setTimeout(() => {
+      appendTextBubble(
+        "bot",
+        "⏳ Still processing — the LLM is taking longer than usual. Please wait…",
+        false   // don't persist this ephemeral notice
+      );
+    }, SLOW_WARN_MS);
+
+    const _cleanup = () => { clearTimeout(timeoutId); clearTimeout(slowWarnTimer); };
+
+    try {
+      const r = await fetch("/chat", {
+        method:  "POST",
+        headers: csrfHeaders(),
+        body:    JSON.stringify(payload),
+        signal:  controller.signal,
+      });
+      _cleanup();
+
+      console.log("[BuildBot] /chat response:", r.status, r.headers.get("content-type"));
+
+      const ct = r.headers.get("content-type") || "";
+      if (ct.includes("text/html") || r.redirected) {
+        console.error("[BuildBot] Server returned HTML. Status:", r.status, "Redirected:", r.redirected);
+        removeTypingIndicator();
+        // Use _appendRawBubble directly so the <a> link is clickable (not escaped)
+        _appendRawBubble("bot",
+          `⚠️ Session expired — <a href="/login" style="color:var(--accent);font-weight:600;">Sign in again</a>`,
+          false
+        );
+        setInputEnabled(true);
+        return;
+      }
+      if (!r.ok) {
+        removeTypingIndicator();
+        appendTextBubble("bot", `❌ Server error (${r.status}). Please try again.`);
+        setInputEnabled(true);
+        return;
+      }
+      const data = await r.json();
+      console.log("[BuildBot] handleResponse data:", JSON.stringify(data).slice(0, 200));
+      handleResponse(data);
+
+    } catch(e) {
+      _cleanup();
+      removeTypingIndicator();
+
+      if (e.name === "AbortError") {
+        // Our 180s timeout fired
+        appendTextBubble("bot",
+          "⏱️ Request timed out (3 min). The LLM is taking very long. " +
+          "Try again with a shorter request, or check the LLM status indicator.",
+          false
+        );
+        setInputEnabled(true);
+        return;
+      }
+
+      // Transient network error — retry once automatically after 2s
+      if (_retryCount < 1) {
+        console.warn(`[BuildBot] Network error, retrying (attempt ${_retryCount + 1})…`, e.message);
+        setTimeout(() => postChat(payload, _retryCount + 1), 2000);
+        return;   // keep spinner, try again in 2s
+      }
+
+      // Still failing after retry
+      appendTextBubble("bot",
+        `❌ Network error: ${e.message}. ` +
+        "Check your connection and try again. " +
+        "If the problem persists the server may be restarting.",
+        false
+      );
+      setInputEnabled(true);
+    }
+  }
+
+  function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || !activeChatId) return;
+
+    if (chats[activeChatId] && chats[activeChatId].messages.filter(m => m.side==="user").length === 0) {
+      autoTitleChat(activeChatId, text);
+    }
+
+    // Dim any open job picker or param cards — user is starting a new request
+    document.querySelectorAll(".job-picker, .param-card").forEach(el => {
+      el.style.opacity = "0.45";
+      el.style.pointerEvents = "none";
+      el.querySelectorAll("button, input").forEach(b => b.disabled = true);
+    });
+
+    appendTextBubble("user", text);
+    inputEl.value = "";
+    setInputEnabled(false);
+    appendTypingIndicator();
+    postChat({ type: "message", message: text });
+  }
+
+  function handleResponse(data) {
+    removeTypingIndicator();
+    console.log("[BuildBot] handleResponse:", { reply: data.reply?.slice?.(0,50), hasJobCard: !!data.job_card?.length, hasParamCard: !!data.param_card?.length, hasBuildId: !!data.build_job_id });
+    const reply = data.reply || "";
+    if (reply) {
+      appendTextBubble("bot", reply);
+    }
+    // If no reply and no card → show a generic fallback so the chat isn't silently empty
+    const hasCard = (data.job_card?.length || data.param_card?.length || data.build_job_id);
+    if (!reply && !hasCard) {
+      appendTextBubble("bot", "⚠️ No response received. Check the server logs.");
+    }
+
+    if (data.job_card?.length) {
+      setTimeout(() => appendJobPickerCard(data.job_card), 80);
+      setInputEnabled(true);   // user can still type while reviewing the picker
+
+    } else if (data.param_card?.length) {
+      setTimeout(() => appendParamCard(data.param_card), 80);
+      setInputEnabled(true);   // user can still type while reviewing the card
+
+    } else if (data.build_job_id) {
+      // Save build info to localStorage so polling survives a page refresh
+      if (activeChatId) {
+        try {
+          localStorage.setItem(LS_BUILD(activeChatId), JSON.stringify({
+            job_id:     data.build_job_id,
+            job_name:   data.job_name || "",
+            started_at: Date.now(),
+          }));
+        } catch(e) {}
+      }
+      setTimeout(() => pollBuildStatus(data.build_job_id, data.job_name || ""), 80);
+      setInputEnabled(true);   // ← input re-enabled right away — new builds can start
+      // input re-enabled inside pollBuildStatus when done
+
+    } else if (data.job_browser) {
+      setTimeout(() => appendJobBrowserCard(data.job_browser), 80);
+      setInputEnabled(true);
+    } else if (data.info_card) {
+      setTimeout(() => appendInfoCard(data.info_card), 80);
+      setInputEnabled(true);
+    } else {
+      setInputEnabled(true);
+    }
+  }
+
+  // ── Enter to send ─────────────────────────────────────────────────────────
+  inputEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey && !sendBtnEl.disabled) { e.preventDefault(); sendMessage(); }
+  });
+  sendBtnEl.addEventListener("click", sendMessage);
+
+  // ── Sidebar toggle ────────────────────────────────────────────────────────
+  document.getElementById("sidebar-toggle").addEventListener("click", () => {
+    layout.classList.toggle("sidebar-hidden");
+  });
+
+  // ── New chat button ───────────────────────────────────────────────────────
+  document.getElementById("new-chat-btn").addEventListener("click", createNewChat);
+
+  // ── Recheck button ────────────────────────────────────────────────────────
+  document.getElementById("recheck-btn").addEventListener("click", checkStatus);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  BOOT
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  (async function boot() {
+    console.log("[BuildBot] boot() starting");
+    // 1. Check service status
+    checkStatus();
+    setInterval(checkStatus, STATUS_POLL_MS);
+
+    // 2. Load chats from localStorage FIRST (works even if server restarted)
+    _loadChatIndex();
+
+    // 3. Also load from server to pick up any chats from other devices/sessions
+    try {
+      const r = await fetch("/sessions");
+      const ct = r.headers.get("content-type") || "";
+      if (ct.includes("text/html") || r.redirected) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!r.ok) throw new Error(`Sessions fetch failed: ${r.status}`);
+      const { sessions } = await r.json();
+      sessions.forEach(s => {
+        if (!chats[s.id]) {   // only add if not already loaded from localStorage
+          const msgs  = _loadFromStorage(s.id);
+          const title = localStorage.getItem(LS_TITLE(s.id)) || s.title;
+          chats[s.id] = { title, messages: msgs };
+        }
+      });
+      if (Object.keys(chats).length > 0) _saveChatIndex();
+    } catch(e) {
+      console.warn("Could not load sessions from server:", e);
+    }
+
+    // 4. Show chats or create a new one
+    if (Object.keys(chats).length === 0) {
+      await createNewChat();
+    } else {
+      renderSidebar();
+      switchToChat(Object.keys(chats)[0]);
+
+      // 5. Reconnect any in-progress build polling (survived page refresh)
+      const currentChatId = Object.keys(chats)[0];
+      try {
+        const buildRaw = localStorage.getItem(LS_BUILD(currentChatId));
+        if (buildRaw) {
+          const build = JSON.parse(buildRaw);
+          const ageMs = Date.now() - (build.started_at || 0);
+          const MAX_AGE_MS = 30 * 60 * 1000;   // 30 minutes max reconnect window
+          if (ageMs < MAX_AGE_MS && build.job_id) {
+            console.log("[BuildBot] Reconnecting build poll for", build.job_id);
+            // Check if build is already done
+            const r = await fetch(`/build-status/${build.job_id}`);
+            if (r.ok) {
+              const state = await r.json();
+              if (state.done) {
+                // Build finished while we were away — show result immediately
+                const card = _createBuildCard(build.job_name || "");
+                _finishBuildCard(card, state);
+                localStorage.removeItem(LS_BUILD(currentChatId));
+              } else {
+                // Still running — resume polling
+                appendTextBubble("bot", `↩️ Reconnected to build **\`${build.job_name}\`** — still running…`, false);
+                setTimeout(() => pollBuildStatus(build.job_id, build.job_name || "", currentChatId), 200);
+              }
+            } else {
+              localStorage.removeItem(LS_BUILD(currentChatId));
+            }
+          } else {
+            localStorage.removeItem(LS_BUILD(currentChatId));
+          }
+        }
+      } catch(e) {
+        console.warn("[BuildBot] Failed to reconnect build:", e);
+      }
+    }
+  })();
+
+  </script>
+</body>
+</html>

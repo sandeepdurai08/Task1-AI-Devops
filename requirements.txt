@@ -1,0 +1,15 @@
+# Core framework
+flask==3.0.3
+werkzeug==3.0.3
+
+# Security extensions
+flask-limiter==3.5.0      # rate limiting on login + chat endpoints
+flask-wtf==1.2.1          # CSRF protection
+flask-session==0.8.0      # server-side sessions (keeps credentials off client cookie)
+
+# HTTP + env
+requests==2.32.3
+python-dotenv==1.0.1
+
+# LLM client
+openai==1.52.0

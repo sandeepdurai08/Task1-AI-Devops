@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="fg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#C0392B"/>
+      <stop offset="50%"  stop-color="#8E44AD"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="0.5" y="0.5" width="31" height="31" rx="8" fill="url(#fg)"/>
+
+  <!-- CI/CD pipeline strip (top) -->
+  <circle cx="6"  cy="7" r="2.2" fill="#E74C3C"/>
+  <circle cx="6"  cy="7" r="1"   fill="white" opacity="0.9"/>
+  <line x1="8.5" y1="7" x2="23.5" y2="7"
+        stroke="white" stroke-width="1" stroke-dasharray="2 1.5"
+        opacity="0.5" stroke-linecap="round"/>
+  <circle cx="26" cy="7" r="2.2" fill="#818cf8"/>
+  <circle cx="26" cy="7" r="1"   fill="white" opacity="0.9"/>
+
+  <!-- Main Jenkins gear centered at (16,19) -->
+  <g transform="translate(16,19)">
+    <!-- 8 gear teeth -->
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(45)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(90)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(135)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(180)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(225)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(270)"/>
+    <rect x="-1.6" y="-10.5" width="3.2" height="4" rx="1" fill="white" opacity="0.85" transform="rotate(315)"/>
+    <!-- Gear body -->
+    <circle cx="0" cy="0" r="7"   fill="#C0392B"/>
+    <circle cx="0" cy="0" r="7"   fill="none" stroke="white" stroke-width="0.7" opacity="0.35"/>
+    <!-- Inner hub -->
+    <circle cx="0" cy="0" r="3"   fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+    <!-- J -->
+    <text x="0.3" y="4.5" text-anchor="middle"
+          font-size="11" font-weight="900" fill="white"
+          font-family="Georgia,'Times New Roman',serif">J</text>
+  </g>
+</svg>

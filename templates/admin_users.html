@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuildBot — User Management</title>
+  <link rel="icon"          type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="shortcut icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="stylesheet"    href="/static/style.css" />
+</head>
+<body class="admin-body">
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-left">
+      <a href="/" class="icon-btn" title="Back to chat" aria-label="Back to chat">←</a>
+      <svg class="logo-svg" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="ahBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#C0392B"/><stop offset="48%" stop-color="#8E44AD"/><stop offset="100%" stop-color="#4f46e5"/>
+          </linearGradient>
+          <linearGradient id="ahGear" x1="8" y1="14" x2="32" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#C0392B" stop-opacity="0.9"/><stop offset="100%" stop-color="#4f46e5" stop-opacity="0.9"/>
+          </linearGradient>
+        </defs>
+        <rect x="1" y="1" width="38" height="38" rx="10" fill="url(#ahBg)"/>
+        <circle cx="9" cy="9.5" r="3" fill="#E74C3C"/>
+        <circle cx="9" cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+        <line x1="12.5" y1="9.5" x2="27.5" y2="9.5" stroke="white" stroke-width="1.2" stroke-dasharray="2.5 2" opacity="0.55" stroke-linecap="round"/>
+        <polyline points="25.5,7.5 28,9.5 25.5,11.5" fill="none" stroke="white" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+        <circle cx="31" cy="9.5" r="3" fill="#818cf8"/>
+        <circle cx="31" cy="9.5" r="1.4" fill="white" opacity="0.9"/>
+        <g transform="translate(19,25)">
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(45)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(90)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(135)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(180)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(225)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(270)"/>
+          <rect x="-2" y="-13" width="4" height="5" rx="1.3" fill="white" opacity="0.88" transform="rotate(315)"/>
+          <circle cx="0" cy="0" r="8.5" fill="url(#ahGear)"/>
+          <circle cx="0" cy="0" r="4.2" fill="none" stroke="white" stroke-width="0.8" opacity="0.5"/>
+          <circle cx="0" cy="0" r="1.8" fill="white" opacity="0.7"/>
+          <polyline points="-2.5,-2.8 0.5,0 -2.5,2.8" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        </g>
+        <g transform="translate(30,30)">
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(60)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(120)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(180)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(240)"/>
+          <rect x="-1.4" y="-9.8" width="2.8" height="3.5" rx="0.8" fill="#C0392B" transform="rotate(300)"/>
+          <circle cx="0" cy="0" r="7" fill="#C0392B"/>
+          <circle cx="0" cy="0" r="3" fill="none" stroke="white" stroke-width="0.7" opacity="0.4"/>
+          <text x="0.3" y="5" text-anchor="middle" font-size="12" font-weight="900" fill="white" font-family="Georgia,serif">J</text>
+        </g>
+      </svg>
+      <div class="logo-text">
+        <span class="logo-title"><span class="logo-build">Build</span><span class="logo-bot">Bot</span></span>
+        <span class="logo-sub">User Management</span>
+      </div>
+    </div>
+    <div class="header-right">
+      {% if user %}
+      <div class="user-badge">
+        <span class="user-avatar">{{ user.display_name[0] | upper }}</span>
+        <span class="user-name">{{ user.display_name }}</span>
+        <span class="user-role-tag">{{ user.role }}</span>
+        <a href="/logout" class="logout-btn" title="Sign out" aria-label="Sign out">⏏</a>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── Page body ─────────────────────────────────────────────────────────── -->
+  <main class="admin-main">
+
+    <!-- Page title + Add button -->
+    <div class="admin-toolbar">
+      <div>
+        <h2 class="admin-heading">👥 Users</h2>
+        <p class="admin-subheading">Manage who can access BuildBot and which Jenkins jobs they can trigger.</p>
+      </div>
+      <button class="btn-primary" onclick="openAddModal()">+ Add User</button>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+    <!-- ── User table ──────────────────────────────────────────────────────── -->
+    <div class="admin-card">
+      <table class="user-table" id="userTable">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Display Name</th>
+            <th>Role</th>
+            <th>Allowed Jobs</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODALS
+       ══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Add User Modal ───────────────────────────────────────────────────── -->
+  <div id="addModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="addModalTitle">Add User</h3>
+        <button class="modal-close" onclick="closeModal('addModal')" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="addError" class="modal-error" style="display:none"></div>
+
+        <div class="form-group">
+          <label for="addUsername">Username <span class="required">*</span></label>
+          <input type="text" id="addUsername" placeholder="e.g. jsmith" autocomplete="off" />
+          <p class="field-hint">Lowercase letters, digits and underscores only.</p>
+        </div>
+        <div class="form-group">
+          <label for="addDisplayName">Display Name <span class="required">*</span></label>
+          <input type="text" id="addDisplayName" placeholder="e.g. John Smith" />
+        </div>
+        <div class="form-group">
+          <label for="addRole">Role <span class="required">*</span></label>
+          <select id="addRole" onchange="onRoleChange('add')">
+            <option value="developer">Developer</option>
+            <option value="readonly">Read-only</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group" id="addJobsGroup">
+          <label for="addJobs">Allowed Jenkins Jobs</label>
+          <input type="text" id="addJobs" placeholder="e.g. hotfix-build, release-build (comma-separated)" />
+          <p class="field-hint">Leave empty to allow no jobs. Admins have access to all jobs.</p>
+        </div>
+        <div class="form-group">
+          <label for="addPassword">Password <span class="required">*</span></label>
+          <div class="password-wrapper">
+            <input type="password" id="addPassword" oninput="checkPolicy('add')" placeholder="Min 8 chars, mixed case, digit, special" autocomplete="new-password" />
+            <button type="button" class="toggle-pw" onclick="togglePw('addPassword', this)">👁</button>
+          </div>
+          <div class="policy-checklist" id="addPolicyList">
+            <div class="policy-item" data-rule="length">○ At least 8 characters</div>
+            <div class="policy-item" data-rule="upper">○ Uppercase letter (A–Z)</div>
+            <div class="policy-item" data-rule="lower">○ Lowercase letter (a–z)</div>
+            <div class="policy-item" data-rule="digit">○ Digit (0–9)</div>
+            <div class="policy-item" data-rule="special">○ Special character (!@#$%^&amp;*-_+=?.,:;)</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="addConfirm">Confirm Password <span class="required">*</span></label>
+          <div class="password-wrapper">
+            <input type="password" id="addConfirm" oninput="checkPolicy('add')" autocomplete="new-password" />
+            <button type="button" class="toggle-pw" onclick="togglePw('addConfirm', this)">👁</button>
+          </div>
+          <p id="addMatchHint" class="field-hint" style="display:none; color:var(--danger)">Passwords do not match.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('addModal')">Cancel</button>
+        <button class="btn-primary" id="addSubmitBtn" disabled onclick="submitAddUser()">Add User</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit User Modal ──────────────────────────────────────────────────── -->
+  <div id="editModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="editModalTitle">Edit User</h3>
+        <button class="modal-close" onclick="closeModal('editModal')" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="editError" class="modal-error" style="display:none"></div>
+        <input type="hidden" id="editUsername" />
+
+        <div class="form-group">
+          <label for="editDisplayName">Display Name</label>
+          <input type="text" id="editDisplayName" />
+        </div>
+        <div class="form-group">
+          <label for="editRole">Role</label>
+          <select id="editRole" onchange="onRoleChange('edit')">
+            <option value="developer">Developer</option>
+            <option value="readonly">Read-only</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group" id="editJobsGroup">
+          <label for="editJobs">Allowed Jenkins Jobs</label>
+          <input type="text" id="editJobs" placeholder="e.g. hotfix-build, release-build" />
+          <p class="field-hint">Comma-separated. Admins always have access to all jobs.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+        <button class="btn-primary" onclick="submitEditUser()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Change Password Modal ────────────────────────────────────────────── -->
+  <div id="pwModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="pwModalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="pwModalTitle">Change Password</h3>
+        <button class="modal-close" onclick="closeModal('pwModal')" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="pwError" class="modal-error" style="display:none"></div>
+        <input type="hidden" id="pwUsername" />
+        <p id="pwSubtitle" class="modal-subtitle"></p>
+
+        <div class="form-group">
+          <label for="pwNew">New Password <span class="required">*</span></label>
+          <div class="password-wrapper">
+            <input type="password" id="pwNew" oninput="checkPolicy('pw')" autocomplete="new-password" />
+            <button type="button" class="toggle-pw" onclick="togglePw('pwNew', this)">👁</button>
+          </div>
+          <div class="policy-checklist" id="pwPolicyList">
+            <div class="policy-item" data-rule="length">○ At least 8 characters</div>
+            <div class="policy-item" data-rule="upper">○ Uppercase letter (A–Z)</div>
+            <div class="policy-item" data-rule="lower">○ Lowercase letter (a–z)</div>
+            <div class="policy-item" data-rule="digit">○ Digit (0–9)</div>
+            <div class="policy-item" data-rule="special">○ Special character (!@#$%^&amp;*-_+=?.,:;)</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="pwConfirm">Confirm Password <span class="required">*</span></label>
+          <div class="password-wrapper">
+            <input type="password" id="pwConfirm" oninput="checkPolicy('pw')" autocomplete="new-password" />
+            <button type="button" class="toggle-pw" onclick="togglePw('pwConfirm', this)">👁</button>
+          </div>
+          <p id="pwMatchHint" class="field-hint" style="display:none; color:var(--danger)">Passwords do not match.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('pwModal')">Cancel</button>
+        <button class="btn-primary" id="pwSubmitBtn" disabled onclick="submitPasswordChange()">Update Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Delete Confirmation Modal ────────────────────────────────────────── -->
+  <div id="deleteModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <div class="modal-box modal-box-sm">
+      <div class="modal-header">
+        <h3 id="deleteModalTitle">Delete User</h3>
+        <button class="modal-close" onclick="closeModal('deleteModal')" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="deleteError" class="modal-error" style="display:none"></div>
+        <input type="hidden" id="deleteUsername" />
+        <p id="deleteMessage" class="delete-confirm-msg"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+        <button class="btn-danger" onclick="submitDeleteUser()">Delete Permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  State
+  // ═══════════════════════════════════════════════════════════════════════════
+  let allUsers = {};
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Bootstrap — load users on page load
+  // ═══════════════════════════════════════════════════════════════════════════
+  (async function init() {
+    await loadUsers();
+  })();
+
+  async function loadUsers() {
+    try {
+      const r    = await fetch("/admin/api/users");
+      allUsers   = await r.json();
+      renderTable(allUsers);
+    } catch (e) {
+      showToast("Failed to load users: " + e.message, "error");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Table rendering
+  // ═══════════════════════════════════════════════════════════════════════════
+  function renderTable(users) {
+    const tbody = document.getElementById("userTableBody");
+    tbody.innerHTML = "";
+
+    const entries = Object.entries(users).sort(([a],[b]) => a.localeCompare(b));
+    if (entries.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No users found.</td></tr>`;
+      return;
+    }
+
+    entries.forEach(([username, u]) => {
+      const row = document.createElement("tr");
+      row.dataset.username = username;
+      if (!u.active) row.classList.add("row-inactive");
+
+      const jobs = u.allowed_jobs === "*" ? "All jobs"
+                 : (u.allowed_jobs?.length ? u.allowed_jobs.join(", ") : "(none)");
+
+      row.innerHTML = `
+        <td class="col-username">
+          <span class="user-initial-badge">${escH(username[0].toUpperCase())}</span>
+          <code>${escH(username)}</code>
+        </td>
+        <td>${escH(u.display_name || "")}</td>
+        <td><span class="role-badge role-${u.role}">${escH(u.role)}</span></td>
+        <td class="col-jobs" title="${escH(u.allowed_jobs === "*" ? "All jobs" : (u.allowed_jobs || []).join(", "))}">
+          ${escH(jobs.length > 40 ? jobs.slice(0, 37) + "…" : jobs)}
+        </td>
+        <td>
+          <span class="status-badge ${u.active ? "status-active" : "status-inactive"}">
+            ${u.active ? "Active" : "Disabled"}
+          </span>
+        </td>
+        <td class="col-actions">
+          <button class="action-btn" title="Edit" onclick="openEditModal('${escH(username)}')">✏️</button>
+          <button class="action-btn" title="Change password" onclick="openPwModal('${escH(username)}', '${escH(u.display_name || username)}')">🔑</button>
+          <button class="action-btn" title="${u.active ? 'Disable' : 'Enable'}"
+                  onclick="toggleActive('${escH(username)}', ${u.active})">
+            ${u.active ? "⏸" : "▶️"}
+          </button>
+          <button class="action-btn action-btn-danger" title="Delete" onclick="openDeleteModal('${escH(username)}', '${escH(u.display_name || username)}')">🗑️</button>
+        </td>`;
+      tbody.appendChild(row);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Modal helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+  function openModal(id) {
+    document.getElementById(id).classList.add("open");
+    document.body.classList.add("modal-open");
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.remove("open");
+    document.body.classList.remove("modal-open");
+  }
+
+  // Close modal on backdrop click
+  document.querySelectorAll(".modal-overlay").forEach(el => {
+    el.addEventListener("click", e => { if (e.target === el) closeModal(el.id); });
+  });
+
+  // Close modal on Escape
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      document.querySelectorAll(".modal-overlay.open").forEach(el => closeModal(el.id));
+    }
+  });
+
+  function showError(elId, msg) {
+    const el = document.getElementById(elId);
+    el.textContent = msg;
+    el.style.display = msg ? "block" : "none";
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Toast notifications
+  // ═══════════════════════════════════════════════════════════════════════════
+  let _toastTimer;
+  function showToast(msg, type = "success") {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.className   = `toast toast-${type} toast-visible`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => el.classList.remove("toast-visible"), 3500);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Password policy live check
+  // ═══════════════════════════════════════════════════════════════════════════
+  const RULES = {
+    length:  pw => pw.length >= 8,
+    upper:   pw => /[A-Z]/.test(pw),
+    lower:   pw => /[a-z]/.test(pw),
+    digit:   pw => /\d/.test(pw),
+    special: pw => /[!@#$%^&*\-_+=?.,:;]/.test(pw),
+  };
+
+  function checkPolicy(prefix) {
+    const pwEl  = document.getElementById(prefix === "add" ? "addPassword" : "pwNew");
+    const cfEl  = document.getElementById(prefix === "add" ? "addConfirm"  : "pwConfirm");
+    const list  = document.getElementById(prefix === "add" ? "addPolicyList" : "pwPolicyList");
+    const hint  = document.getElementById(prefix === "add" ? "addMatchHint"  : "pwMatchHint");
+    const btn   = document.getElementById(prefix === "add" ? "addSubmitBtn"  : "pwSubmitBtn");
+
+    const pw    = pwEl.value;
+    const cf    = cfEl.value;
+    let allPass = true;
+
+    list.querySelectorAll(".policy-item").forEach(item => {
+      const rule   = item.dataset.rule;
+      const passes = RULES[rule](pw);
+      item.className = "policy-item " + (passes ? "pass" : "fail");
+      item.textContent = (passes ? "✅ " : "❌ ") + item.textContent.slice(2);
+      if (!passes) allPass = false;
+    });
+
+    const match = pw && cf && pw === cf;
+    if (cf) {
+      hint.style.display = match ? "none" : "block";
+    } else {
+      hint.style.display = "none";
+    }
+
+    btn.disabled = !(allPass && match);
+  }
+
+  function togglePw(inputId, btn) {
+    const inp = document.getElementById(inputId);
+    if (inp.type === "password") { inp.type = "text";     btn.textContent = "🙈"; }
+    else                         { inp.type = "password"; btn.textContent = "👁"; }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Role change — show/hide jobs field
+  // ═══════════════════════════════════════════════════════════════════════════
+  function onRoleChange(prefix) {
+    const role     = document.getElementById(prefix + "Role").value;
+    const jobGroup = document.getElementById(prefix + "JobsGroup");
+    if (jobGroup) {
+      // Admins: all jobs; readonly: no jobs; developer: pick jobs
+      jobGroup.style.display = (role === "admin" || role === "readonly") ? "none" : "block";
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ADD USER
+  // ═══════════════════════════════════════════════════════════════════════════
+  function openAddModal() {
+    ["addUsername","addDisplayName","addPassword","addConfirm","addJobs"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("addRole").value = "developer";
+    document.getElementById("addJobsGroup").style.display = "block";
+    document.getElementById("addSubmitBtn").disabled = true;
+    document.getElementById("addMatchHint").style.display = "none";
+    showError("addError", "");
+    // Reset policy icons
+    document.querySelectorAll("#addPolicyList .policy-item").forEach(el => {
+      el.className = "policy-item";
+      el.textContent = "○ " + el.textContent.replace(/^[✅❌○] /, "");
+    });
+    openModal("addModal");
+    setTimeout(() => document.getElementById("addUsername").focus(), 100);
+  }
+
+  async function submitAddUser() {
+    showError("addError", "");
+    const username     = document.getElementById("addUsername").value.trim().toLowerCase();
+    const display_name = document.getElementById("addDisplayName").value.trim();
+    const role         = document.getElementById("addRole").value;
+    const jobsRaw      = document.getElementById("addJobs").value;
+    const password     = document.getElementById("addPassword").value;
+    const allowed_jobs = role === "admin"     ? "*"
+                       : role === "readonly"  ? []
+                       : jobsRaw.split(",").map(j => j.trim()).filter(Boolean);
+
+    const r = await fetch("/admin/api/users", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, display_name, role, allowed_jobs, password}),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const detail = data.details ? "\n" + data.details.join("\n") : "";
+      showError("addError", (data.error || "Unknown error") + detail);
+      return;
+    }
+    closeModal("addModal");
+    showToast(`User '${username}' created successfully.`);
+    await loadUsers();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  EDIT USER
+  // ═══════════════════════════════════════════════════════════════════════════
+  function openEditModal(username) {
+    const u = allUsers[username];
+    if (!u) return;
+    document.getElementById("editUsername").value    = username;
+    document.getElementById("editDisplayName").value = u.display_name || "";
+    document.getElementById("editRole").value        = u.role || "developer";
+    document.getElementById("editJobs").value =
+      u.allowed_jobs === "*" ? "" : (u.allowed_jobs || []).join(", ");
+    showError("editError", "");
+    onRoleChange("edit");
+    openModal("editModal");
+    setTimeout(() => document.getElementById("editDisplayName").focus(), 100);
+  }
+
+  async function submitEditUser() {
+    showError("editError", "");
+    const username     = document.getElementById("editUsername").value;
+    const display_name = document.getElementById("editDisplayName").value.trim();
+    const role         = document.getElementById("editRole").value;
+    const jobsRaw      = document.getElementById("editJobs").value;
+    const allowed_jobs = role === "admin"    ? "*"
+                       : role === "readonly" ? []
+                       : jobsRaw.split(",").map(j => j.trim()).filter(Boolean);
+
+    const r = await fetch(`/admin/api/users/${encodeURIComponent(username)}`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({display_name, role, allowed_jobs}),
+    });
+    const data = await r.json();
+    if (!r.ok) { showError("editError", data.error || "Unknown error"); return; }
+    closeModal("editModal");
+    showToast(`User '${username}' updated.`);
+    await loadUsers();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  CHANGE PASSWORD
+  // ═══════════════════════════════════════════════════════════════════════════
+  function openPwModal(username, displayName) {
+    document.getElementById("pwUsername").value    = username;
+    document.getElementById("pwSubtitle").textContent =
+      `Setting new password for ${displayName} (${username})`;
+    document.getElementById("pwNew").value     = "";
+    document.getElementById("pwConfirm").value = "";
+    document.getElementById("pwSubmitBtn").disabled = true;
+    document.getElementById("pwMatchHint").style.display = "none";
+    showError("pwError", "");
+    document.querySelectorAll("#pwPolicyList .policy-item").forEach(el => {
+      el.className = "policy-item";
+      el.textContent = "○ " + el.textContent.replace(/^[✅❌○] /, "");
+    });
+    openModal("pwModal");
+    setTimeout(() => document.getElementById("pwNew").focus(), 100);
+  }
+
+  async function submitPasswordChange() {
+    showError("pwError", "");
+    const username = document.getElementById("pwUsername").value;
+    const password = document.getElementById("pwNew").value;
+
+    const r = await fetch(`/admin/api/users/${encodeURIComponent(username)}/password`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({password}),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const detail = data.details ? "\n" + data.details.join("\n") : "";
+      showError("pwError", (data.error || "Unknown error") + detail);
+      return;
+    }
+    closeModal("pwModal");
+    showToast(`Password updated for '${username}'.`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ENABLE / DISABLE
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function toggleActive(username, currentlyActive) {
+    const r = await fetch(`/admin/api/users/${encodeURIComponent(username)}`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({active: !currentlyActive}),
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error || "Could not update user.", "error"); return; }
+    showToast(`User '${username}' ${currentlyActive ? "disabled" : "enabled"}.`);
+    await loadUsers();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DELETE USER
+  // ═══════════════════════════════════════════════════════════════════════════
+  function openDeleteModal(username, displayName) {
+    document.getElementById("deleteUsername").value = username;
+    document.getElementById("deleteMessage").innerHTML =
+      `Are you sure you want to permanently delete <strong>${escH(displayName)}</strong> (<code>${escH(username)}</code>)?
+      <br><br>This action cannot be undone.`;
+    showError("deleteError", "");
+    openModal("deleteModal");
+  }
+
+  async function submitDeleteUser() {
+    showError("deleteError", "");
+    const username = document.getElementById("deleteUsername").value;
+    const r = await fetch(`/admin/api/users/${encodeURIComponent(username)}`, {method: "DELETE"});
+    const data = await r.json();
+    if (!r.ok) { showError("deleteError", data.error || "Could not delete user."); return; }
+    closeModal("deleteModal");
+    showToast(`User '${username}' deleted.`);
+    await loadUsers();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Utils
+  // ═══════════════════════════════════════════════════════════════════════════
+  function escH(str) {
+    return String(str)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  </script>
+</body>
+</html>
