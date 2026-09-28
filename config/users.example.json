@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "SAMPLE STRUCTURE — do not use as users.json directly.",
+    "Copy to users.json and regenerate password hashes with:",
+    "  python scripts/manage_users.py add --username <user> --role <role>",
+    "",
+    "Roles:  admin  |  developer  |  readonly",
+    "allowed_jobs:  '*'  = all jobs  |  []  = no jobs  |  ['job1','job2']  = specific jobs"
+  ],
+
+  "users": {
+
+    "admin": {
+      "display_name":  "Admin",
+      "password_hash": "<run: python scripts/manage_users.py add --username admin --role admin>",
+      "role":          "admin",
+      "allowed_jobs":  "*",
+      "active":        true,
+      "_notes": "Full access: all jobs, admin panel, stop any build, manage users."
+    },
+
+    "alice": {
+      "display_name":  "Alice Dev",
+      "password_hash": "<run: python scripts/manage_users.py add --username alice --role developer>",
+      "role":          "developer",
+      "allowed_jobs":  ["hotfix-build", "release-build", "dotnet-api"],
+      "active":        true,
+      "_notes": "Can trigger and stop her own builds. Cannot stop others' builds or access admin panel."
+    },
+
+    "bob": {
+      "display_name":  "Bob Dev",
+      "password_hash": "<run: python scripts/manage_users.py add --username bob --role developer>",
+      "role":          "developer",
+      "allowed_jobs":  ["hotfix-build"],
+      "active":        true,
+      "_notes": "Restricted to hotfix-build only."
+    },
+
+    "carol": {
+      "display_name":  "Carol QA",
+      "password_hash": "<run: python scripts/manage_users.py add --username carol --role readonly>",
+      "role":          "readonly",
+      "allowed_jobs":  [],
+      "active":        true,
+      "_notes": "Read-only: can view jobs, logs, artifacts, build history. Cannot trigger or stop builds."
+    },
+
+    "david": {
+      "display_name":  "David (Disabled)",
+      "password_hash": "<hash>",
+      "role":          "developer",
+      "allowed_jobs":  ["release-build"],
+      "active":        false,
+      "_notes": "active=false: account exists but login is blocked. Use admin panel to re-enable."
+    }
+
+  }
+}
