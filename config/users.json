@@ -1,9 +1,0 @@
-{
-  "_comment": [
-    "BuildBot user database — emergency local accounts.",
-    "Passwords are scrypt-hashed. NEVER store plain-text passwords here.",
-    "Use: python scripts/manage_users.py add --username admin --role admin",
-    "Password policy: min 8 chars, uppercase, lowercase, digit, special char."
-  ],
-  "users": {}
-}

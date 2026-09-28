@@ -45,6 +45,5 @@ _verify_*.py
 _connectivity_*.py
 _curl_*.json
 
-# ─── Runtime user database (contains password hashes) ─────────────────────────
-# Committed as empty template; real file is populated by manage_users.py
-# config/users.json is tracked as an empty shell — do NOT add hashes here
+# ─── Runtime user database (contains password hashes — keep local only) ───────
+config/users.json
