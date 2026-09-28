@@ -1,43 +1,9 @@
 {
   "_comment": [
-    "BuildBot user database.",
-    "Passwords are hashed \u2014 NEVER store plain-text passwords here.",
-    "Use scripts/manage_users.py to add, change, or remove users.",
-    "Password policy: min 8 chars, must include uppercase, lowercase, digit, special char."
+    "BuildBot user database — emergency local accounts.",
+    "Passwords are scrypt-hashed. NEVER store plain-text passwords here.",
+    "Use: python scripts/manage_users.py add --username admin --role admin",
+    "Password policy: min 8 chars, uppercase, lowercase, digit, special char."
   ],
-  "users": {
-    "admin": {
-      "display_name": "Admin",
-      "password_hash": "scrypt:32768:8:1$tg58agaO3eXJAnZU$0e7fe22bd662077aaf3ad348d23075a4bcbcf4751977053d8ea548efefa3203fdb82ce71d3bbe8a3680b36986498dd51ac608578f99141f6dfabf2b9d867d6f1",
-      "role": "admin",
-      "allowed_jobs": "*",
-      "active": true
-    },
-    "alice": {
-      "display_name": "Alice Johnson",
-      "password_hash": "scrypt:32768:8:1$6IHointmtMOWEDc6$8befd590f9ba025aebd5014d9bcb79b938402ffb2086c0e0befa9064b66ff147fa79f880b41d30d7a44b59560e5a86bbe0f3dd4dda1d91b45a89d7faebbef3f1",
-      "role": "developer",
-      "allowed_jobs": [
-        "hotfix-build",
-        "release-build"
-      ],
-      "active": false
-    },
-    "bob": {
-      "display_name": "Bob Smith",
-      "password_hash": "scrypt:32768:8:1$S2SREThZeJ9vlZPV$6844535baaf8deeb819da649333affdfb18d58f71fe1d52b7e7f3b561530d966d5b7db420e9be13700ee8d81ee035585cadcaae9e66211f1eb4277f690b59965",
-      "role": "developer",
-      "allowed_jobs": [
-        "hotfix-build"
-      ],
-      "active": false
-    },
-    "carol": {
-      "display_name": "Carol QA",
-      "password_hash": "scrypt:32768:8:1$XZNqkPhRfDCTVtwi$17af3a02425e3af480a60018392cdb4c54daf1b4b10b0476bb2f4f2a0a34f7e2aea51d8af4ebf483c1789b9da0af25bb306922b98792b404e06a7128d0ddbd8c",
-      "role": "readonly",
-      "allowed_jobs": [],
-      "active": true
-    }
-  }
+  "users": {}
 }

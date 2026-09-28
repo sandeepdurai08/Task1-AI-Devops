@@ -253,6 +253,9 @@ The **👥 Users** link in the header is only visible to admins.
 | `JENKINS_JOBS` | optional | ❌ | Job allowlist (empty = all visible) |
 | `AUTH_MODE` | ✅ | ❌ | `jenkins` or `local` |
 | `AUTH_FALLBACK` | ✅ | ❌ | `true` enables local admin fallback |
+| `BOOTSTRAP_ADMIN_USER` | optional | ❌ | Username for auto-created admin (default: `admin`) |
+| `BOOTSTRAP_ADMIN_DISPLAY` | optional | ❌ | Display name for bootstrap admin (default: `Admin`) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | optional | ❌ | Password for bootstrap admin — creates account on first run if users.json empty |
 | `DEFAULT_REPO_URL` | optional | ✅ | Default repo URL for builds |
 | `DEFAULT_BRANCH` | optional | ✅ | Default branch |
 | `ARTIFACT_SHARE` | ✅ | ❌ | Artifact output folder |

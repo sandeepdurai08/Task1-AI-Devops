@@ -192,6 +192,55 @@ def _evict_stale_entries() -> None:
 threading.Thread(target=_evict_stale_entries, daemon=True, name="ttl-eviction").start()
 
 
+# ─── Bootstrap admin account from .env ───────────────────────────────────────────
+# Runs once at startup: if users.json has no users AND BOOTSTRAP_ADMIN_PASSWORD is set,
+# create the admin account automatically so the app is usable without running the CLI.
+
+def _bootstrap_admin() -> None:
+    """Create the bootstrap admin from env vars if users.json is empty."""
+    username = os.getenv("BOOTSTRAP_ADMIN_USER",     "admin").strip()
+    display  = os.getenv("BOOTSTRAP_ADMIN_DISPLAY",  "Admin").strip()
+    password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+
+    if not password:
+        return   # nothing to do — operator chose manual setup
+
+    try:
+        from services.auth import (
+            load_users, save_users, hash_password, validate_password,
+        )
+        db    = load_users()
+        users = db.get("users", {})
+
+        if users:
+            return   # already populated — never overwrite
+
+        errors = validate_password(password)
+        if errors:
+            logger.warning(
+                "BOOTSTRAP_ADMIN_PASSWORD does not meet policy (%s) — skipping auto-create.",
+                errors,
+            )
+            return
+
+        db.setdefault("users", {})[username] = {
+            "display_name":  display or username,
+            "password_hash": hash_password(password),
+            "role":          "admin",
+            "allowed_jobs":  "*",
+            "active":        True,
+        }
+        save_users(db)
+        logger.info("Bootstrap admin '%s' created from env vars.", username)
+        audit_logger.info("BOOTSTRAP_ADMIN_CREATED  user=%s", username)
+
+    except Exception as exc:
+        logger.warning("Bootstrap admin creation failed: %s", exc)
+
+
+_bootstrap_admin()
+
+
 # ─── Session helper ───────────────────────────────────────────────────────────────
 
 def _get_sid() -> str:
