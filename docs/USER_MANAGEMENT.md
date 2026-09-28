@@ -212,16 +212,21 @@ Accessible from the **👥 Users** link in the BuildBot header (admin role only)
 
 ## Default accounts
 
-Set during initial setup. **Change all passwords immediately.**
+Set during initial setup. **Change all passwords immediately after setup.**
 
 | Username | Password | Role | Notes |
 |---|---|---|---|
-| `admin` | `Adm!n@12` | admin | Emergency fallback admin |
-| `alice` | `Al!ce#45` | developer | Example — remove or repurpose |
-| `bob` | `B0bDev#7` | developer | Example — remove or repurpose |
-| `carol` | `C@rol888` | readonly | Example — remove or repurpose |
+| `admin` | *(set on first run)* | admin | Emergency fallback admin — set a strong password |
+| `alice` | *(set on first run)* | developer | Example — remove or repurpose |
+| `bob` | *(set on first run)* | developer | Example — remove or repurpose |
+| `carol` | *(set on first run)* | readonly | Example — remove or repurpose |
 
-Change a password in the admin panel or via CLI:
+Create accounts using the admin panel or CLI:
+```powershell
+python scripts\manage_users.py add --username admin --role admin
+```
+
+Change a password:
 ```powershell
 python scripts\manage_users.py passwd --username admin
 ```

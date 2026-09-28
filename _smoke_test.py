@@ -57,8 +57,9 @@ try:
           "stays on login page")
 
     # POST /login with good creds
+    # Update this to match your local admin password from config/users.json
     r = s.post(f"{BASE}/login",
-               data={"username": "admin", "password": "Adm!n@12",
+               data={"username": "admin", "password": "YOUR_ADMIN_PASSWORD_HERE",
                      "csrf_token": ""},
                timeout=5, allow_redirects=True)
     check("Good login succeeds", "/" in r.url and "login" not in r.url,
