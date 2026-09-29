@@ -264,9 +264,10 @@ The **👥 Users** link in the header is only visible to admins.
 | `SMTP_PORT` | ✅ | ❌ | SMTP port (default: `1025`) |
 | `NOTIFY_EMAIL_FROM` | ✅ | ❌ | Sender address |
 | `NOTIFY_EMAIL_TO` | ✅ | ❌ | Recipient(s), comma-separated |
-| `FLASK_SECRET_KEY` | ✅ | ❌ | 64-char random hex |
+| `FLASK_SECRET_KEY` | ✅ | ❌ | 64-char random hex — signs session cookies |
+| `MASTER_SECRET` | optional | ❌ | If set, session key is derived daily (HMAC-SHA256 of this + UTC date). Rotates at midnight UTC. Set once, never change. |
 | `FLASK_DEBUG` | optional | ❌ | `1` for auto-reload (dev only) |
-| `SESSION_IDLE_TIMEOUT_MIN` | optional | ❌ | Idle logout timeout (default: 60) |
+| `SESSION_IDLE_TIMEOUT_MIN` | optional | ❌ | Idle logout timeout in minutes (default: 480 = 8 hours) |
 | `ENTRY_TTL_HOURS` | optional | ❌ | In-memory TTL (default: 24) |
 | `RATE_LOGIN` | optional | ❌ | Login rate limit (default: `10 per minute`) |
 | `RATE_CHAT` | optional | ❌ | Chat rate limit (default: `30 per minute`) |

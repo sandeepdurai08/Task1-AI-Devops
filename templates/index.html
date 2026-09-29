@@ -424,9 +424,14 @@
   async function createNewChat() {
     try {
       const resp = await fetch("/sessions", { method: "POST", headers: csrfHeaders() });
-      if (resp.redirected || (resp.headers.get("content-type") || "").includes("text/html")) {
+      // 401 = genuine auth failure → must sign in again
+      if (resp.status === 401) {
         window.location.href = "/login";
         return;
+      }
+      // HTML when JSON expected = server restarting, not an auth failure
+      if (resp.redirected || (resp.headers.get("content-type") || "").includes("text/html")) {
+        throw new Error(`Server returned unexpected HTML (status ${resp.status}) — may be restarting`);
       }
       if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
       const data = await resp.json();
@@ -1203,10 +1208,10 @@
       try {
         const r = await fetch(`/build-status/${jobId}`);
 
-        // If server returns HTML (session expired mid-build), skip this cycle
+        // If server returns HTML when JSON expected (restart/proxy error), skip this cycle
         const ct = r.headers.get("content-type") || "";
         if (ct.includes("text/html") || r.redirected) {
-          console.warn("[BuildBot] build-status returned HTML — session may have expired, retrying...");
+          console.warn("[BuildBot] build-status returned HTML — server may be restarting, retrying...");
           return;   // keep polling — build is still running in the background
         }
 
@@ -1447,6 +1452,24 @@
   async function postChat(payload, _retryCount = 0) {
     if (!activeChatId) { console.warn("[BuildBot] postChat: no activeChatId"); return; }
     payload.chat_id = activeChatId;
+
+    // ── Attach recent chat context so the LLM can understand references ──────────
+    // "build again" / "stop it" / "analyze that" — LLM needs prior turns to resolve them
+    if (payload.type === "message" && activeChatId && chats[activeChatId]) {
+      const recentMsgs = chats[activeChatId].messages.slice(-6);  // last 3 turns (6 msgs)
+      const context = recentMsgs.map(m => ({
+        role:    m.side === "user" ? "user" : "assistant",
+        // Strip HTML to plain text, cap at 300 chars to limit tokens
+        content: (m.html || "")
+                   .replace(/<pre[^>]*>[\s\S]*?<\/pre>/gi, "[console log]")
+                   .replace(/<[^>]+>/g, " ")
+                   .replace(/\s+/g, " ")
+                   .trim()
+                   .slice(0, 300),
+      })).filter(m => m.content && m.content !== "[console log]");
+      if (context.length) payload.context = context;
+    }
+
     console.log("[BuildBot] postChat →", payload.type, payload.message || "");
 
     // ── Abort controller: 180s hard cap (LLM may take up to 120s + buffer) ──────
@@ -1478,12 +1501,23 @@
       console.log("[BuildBot] /chat response:", r.status, r.headers.get("content-type"));
 
       const ct = r.headers.get("content-type") || "";
-      if (ct.includes("text/html") || r.redirected) {
-        console.error("[BuildBot] Server returned HTML. Status:", r.status, "Redirected:", r.redirected);
+      // 401 = genuine auth failure (session expired or timed out)
+      if (r.status === 401) {
+        console.warn("[BuildBot] Auth required (401) — session expired.");
         removeTypingIndicator();
-        // Use _appendRawBubble directly so the <a> link is clickable (not escaped)
         _appendRawBubble("bot",
           `⚠️ Session expired — <a href="/login" style="color:var(--accent);font-weight:600;">Sign in again</a>`,
+          false
+        );
+        setInputEnabled(true);
+        return;
+      }
+      // HTML when JSON was expected = server restarting or proxy error (not an auth failure)
+      if (ct.includes("text/html") || r.redirected) {
+        console.error("[BuildBot] Unexpected HTML response (status %d) — server may be restarting.", r.status);
+        removeTypingIndicator();
+        _appendRawBubble("bot",
+          `⚠️ Server error or restarting — please try again in a moment.`,
           false
         );
         setInputEnabled(true);
@@ -1635,9 +1669,16 @@
     try {
       const r = await fetch("/sessions");
       const ct = r.headers.get("content-type") || "";
-      if (ct.includes("text/html") || r.redirected) {
+      // 401 = not logged in → must sign in
+      if (r.status === 401) {
         window.location.href = "/login";
         return;
+      }
+      // HTML when JSON expected = server restarting — don't force re-login,
+      // fall back to localStorage which already has the chat history.
+      if (ct.includes("text/html") || r.redirected) {
+        console.warn("[BuildBot] GET /sessions: server returned HTML — may be restarting. Using localStorage.");
+        throw new Error(`Unexpected HTML from /sessions (status ${r.status})`);
       }
       if (!r.ok) throw new Error(`Sessions fetch failed: ${r.status}`);
       const { sessions } = await r.json();

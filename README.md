@@ -183,6 +183,7 @@ NEW-ai-bot-atmpt2/
 ├── docs/
 │   ├── ARCHITECTURE.md      Component map, data flows, route list, Jenkins API table
 │   ├── PROMPTS.md           All LLM prompts with rationale and examples
+│   ├── REFLECTION.md        Challenge reflection — what worked, what didn't, lessons learned
 │   ├── RESPONSES.md         Predefined responses and LLM dependency map
 │   ├── SECURITY.md          Security audit and hardening notes
 │   └── USER_MANAGEMENT.md   Managing users (Jenkins + local mode)
@@ -289,6 +290,7 @@ The last build of DOTNET service was triggered by alice
 | [SETUP.md](SETUP.md) | Python, Jenkins, .env, auth modes, troubleshooting |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component map, all data flows, route list, API table |
 | [docs/PROMPTS.md](docs/PROMPTS.md) | All LLM prompts, settings, examples, fallback behaviour |
+| [docs/REFLECTION.md](docs/REFLECTION.md) | Challenge reflection — what worked, what didn't, lessons learned |
 | [docs/RESPONSES.md](docs/RESPONSES.md) | Predefined responses, LLM dependency map |
 | [docs/USER_MANAGEMENT.md](docs/USER_MANAGEMENT.md) | Jenkins roles, BuildBot admin panel |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security audit, fix status, hardening guide |

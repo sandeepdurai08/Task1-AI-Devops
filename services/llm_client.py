@@ -178,7 +178,7 @@ def _normalise_choices(raw_value, valid_choices: list[str]) -> list[str]:
 
 # ─── Main public function ────────────────────────────────────────────────────────
 
-def parse_build_request(user_message: str, param_schema: list[dict]) -> dict:
+def parse_build_request(user_message: str, param_schema: list[dict], context: list | None = None) -> dict:
     """
     Ask the LLM to extract Jenkins parameter values from user_message.
 
@@ -200,9 +200,11 @@ def parse_build_request(user_message: str, param_schema: list[dict]) -> dict:
     """
     model   = os.getenv("LLM_MODEL", "")
     system  = _build_system_prompt(param_schema)
+    ctx_msgs = [{"role": m["role"], "content": m["content"][:400]} for m in (context or [])[-4:]]
     # /no_think in the USER turn disables Qwen3 chain-of-thought (faster response)
     messages = [
         {"role": "system",  "content": system},
+        *ctx_msgs,
         {"role": "user",    "content": f"/no_think\n{user_message}"},
     ]
 
@@ -282,7 +284,7 @@ def parse_build_request(user_message: str, param_schema: list[dict]) -> dict:
 
 # ─── Job selection ────────────────────────────────────────────────────────────────
 
-def select_job(user_message: str, jobs: list[dict]) -> dict:
+def select_job(user_message: str, jobs: list[dict], context: list | None = None) -> dict:
     """
     Ask the LLM to pick the most appropriate Jenkins job for the developer's request.
 
@@ -324,6 +326,7 @@ Rules: job_name must be from the list or null. high confidence = one job clearly
 
     messages = [
         {"role": "system", "content": system},
+        *[{"role": m["role"], "content": m["content"][:400]} for m in (context or [])[-4:]],
         {"role": "user",   "content": f"/no_think\n{user_message}"},
     ]
 
@@ -513,9 +516,12 @@ _QUERY_KEYWORDS = [
     r'\bversus\b.*\bbuild\b',
 
     # ── Failed build history (Group B) ───────────────────────────────────────────
-    r'\bfailed\s+builds?\b', r'\ball\s+failures\b',
+    r'\bfailed\s+builds?\b', r'\bfailed\s+jobs?\b',      # "failed job", "failed jobs"
+    r'\ball\s+failures\b',
     r'\bfailure\s+history\b', r'\bbuilds?\s+that\s+failed\b',
+    r'\bjobs?\s+that\s+failed\b',                          # "jobs that failed"
     r'\brecent\s+failures\b', r'\blist\s+failures\b',
+    r'\blist\s+failed\b', r'\bshow\s+failed\s+jobs?\b',   # "list failed jobs/job"
 
     # ── Jenkins info / version (Group B) ─────────────────────────────────────────
     r'\bjenkins\s+version\b', r'\bjenkins\s+health\b',
@@ -563,7 +569,7 @@ To trigger a build, users type: "build hotfix/PAY-1 from https://github.com/acme
 Do NOT trigger Jenkins builds yourself."""
 
 
-def general_chat_response(message: str) -> str:
+def general_chat_response(message: str, context: list | None = None) -> str:
     """
     Respond to a general (non-build) message using the LLM.
     Does NOT call Jenkins or extract parameters.
@@ -572,13 +578,15 @@ def general_chat_response(message: str) -> str:
     Falls back to a simple default on any error.
     """
     model = os.getenv("LLM_MODEL", "")
+    ctx_msgs = [{"role": m["role"], "content": m["content"][:400]} for m in (context or [])[-4:]]
 
     try:
-        client   = get_client()    # ← inside try so client errors are caught
+        client   = get_client()
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": _GENERAL_SYSTEM},
+                *ctx_msgs,
                 {"role": "user",   "content": f"/no_think\n{message}"},
             ],
             temperature=0.7,
@@ -634,7 +642,7 @@ Common phrasings:
 - "plugins / installed plugins" → list_plugins
 
 Return ONLY a JSON object (no prose):
-{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10}
+{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10,"status":""}
 
 Rules:
 - job_name / view_name must be an exact name from the provided lists, or null.
@@ -643,6 +651,7 @@ Rules:
 - lines: defaults to 50 for console_log, 20 for analyze_failure.
 - count: number of builds for list_build_history / search_failed_builds (default 10).
 - search_query: only for search_jobs.
+- status: for list_jobs — set to FAILURE|SUCCESS|BUILDING|UNSTABLE if user filters by status (e.g. "failed jobs" → FAILURE). Empty string = all jobs.
 - If unclear, action = "unknown"."""
 
 
@@ -650,6 +659,7 @@ def parse_jenkins_query(
     message: str,
     job_names: list[str],
     view_names: list[str],
+    context: list | None = None,
 ) -> dict:
     """
     Use the LLM to parse a Jenkins management request into a structured action.
@@ -674,6 +684,7 @@ def parse_jenkins_query(
 
     messages = [
         {"role": "system", "content": _QUERY_PARSE_SYSTEM + "\n\n" + catalogue},
+        *[{"role": m["role"], "content": m["content"][:400]} for m in (context or [])[-4:]],
         {"role": "user",   "content": f"/no_think\n{message}"},
     ]
 
@@ -741,6 +752,7 @@ def parse_jenkins_query(
         "lines":          lines,
         "count":          count,
         "search_query":   result.get("search_query"),
+        "status":         (result.get("status") or "").strip().upper(),
     }
 
 

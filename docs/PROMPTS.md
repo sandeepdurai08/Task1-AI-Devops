@@ -27,9 +27,32 @@ reducing response time from minutes to seconds.
 ```python
 messages = [
     {"role": "system", "content": <system_prompt>},
+    # optional: last 3 conversation turns (context)
+    {"role": "user",   "content": "<prior user message>"},
+    {"role": "assistant", "content": "<prior bot reply>"},
+    # current message — always last
     {"role": "user",   "content": f"/no_think\n{user_message}"},  # ← correct
 ]
 ```
+
+## Conversation context
+
+All 4 LLM call functions (`general_chat_response`, `select_job`, `parse_build_request`,
+`parse_jenkins_query`) now receive the last **3 conversation turns** (6 messages) as
+context prepended before the current user message.
+
+The frontend extracts these from `chats[chatId].messages`, strips HTML to plain text
+(capped at 300 chars/message), and sends them as `context: [{role, content}]` in the
+POST `/chat` payload.
+
+**What this enables:**
+
+| User says | Without context | With context |
+|---|---|---|
+| `"build again"` | No URL/branch — shows picker | Reuses repo/branch from previous message |
+| `"stop it"` | No job reference → shows picker | Knows which job was last triggered |
+| `"analyze that"` | No build reference | Uses the job/build discussed previously |
+| `"why did it fail"` | Generic fallback | References the last failed build from context |
 
 ---
 
@@ -149,16 +172,19 @@ Common phrasings:
 - "plugins / installed plugins" → list_plugins
 
 Return ONLY a JSON object (no prose):
-{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10}
+```json
+{"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10,"status":""}
+```
 
 Rules:
-- job_name / view_name must be an exact name from the provided lists, or null.
-- build_number: integer when the user mentions a specific build number, else null.
-- build_number_b: second build number for compare_builds (e.g. "compare 5 and 6").
-- lines: defaults to 50 for console_log, 20 for analyze_failure.
-- count: number of builds for list_build_history / search_failed_builds (default 10).
-- search_query: only for search_jobs.
-- If unclear, action = "unknown".
+- `job_name` / `view_name` must be an exact name from the provided lists, or null.
+- `build_number`: integer when user mentions a specific build, else null.
+- `build_number_b`: second build number for `compare_builds`.
+- `lines`: defaults to 50 for `console_log`, 20 for `analyze_failure`.
+- `count`: builds to fetch for `list_build_history` / `search_failed_builds` (default 10).
+- `search_query`: only for `search_jobs`.
+- `status`: for `list_jobs` — `FAILURE|SUCCESS|BUILDING|UNSTABLE` if user filters by status (e.g. "failed jobs" → `FAILURE`). Empty = all jobs.
+- If unclear, `action = "unknown"`.
 
 Jobs: payments-build, java-service, dotnet-api, hotfix-deploy
 Views: All, Failed Builds
@@ -449,7 +475,9 @@ result = _extract_json(raw)
 | v9 | "artifacts" / "artifact location of X" routed to build | Added 8 standalone and `location/path/need` artifact patterns to `_QUERY_RE` |
 | v10 | 10 new query actions added (build history, running builds, queue, etc.) | Extended `_QUERY_PARSE_SYSTEM` with 10 new actions + `build_number_b`/`count` fields |
 | v11 | Job browser filter conversations needed LLM support | Added `parse_job_filter_update()` + `_JOB_FILTER_SYSTEM` (Prompt 6) |
-| v12 — current | Real job names in docs replaced with generic examples | Documentation cleanup |
+| v12 | Real job names in docs replaced with generic examples | Documentation cleanup |
+| v13 | "list failed job" triggered build flow | Added `\bfailed\s+jobs?\b`, `\blist\s+failed\b`, `\bshow\s+failed\s+jobs?\b`, `\bjobs?\s+that\s+failed\b` to `_QUERY_RE` |
+| v14 — current | "list failed jobs" opened browser unfiltered | Added `status` field to `_QUERY_PARSE_SYSTEM`; `list_jobs` handler pre-applies status from LLM response |
 
 ---
 

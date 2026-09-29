@@ -8,6 +8,7 @@ Multi-job, three-phase chat flow:
   Phase 2   POST /chat  {"type": "param_submit", "params": {...}}
 """
 
+import json
 import logging
 import logging.handlers
 import os
@@ -27,6 +28,10 @@ _LOG_DIR      = Path(os.getenv("LOG_DIR",      "logs"))
 _SESSION_DIR  = Path(os.getenv("SESSION_DIR",  "flask_sessions"))
 _LOG_DIR.mkdir(exist_ok=True)
 _SESSION_DIR.mkdir(exist_ok=True)
+
+# Persistence files — in-memory state is written here so it survives restarts
+_CHATS_FILE = _SESSION_DIR / "user_chats.json"
+_CONV_FILE  = _SESSION_DIR / "conv_sessions.json"
 
 # ─── Audit log (persistent, rotating 10 MB × 10 files) ──────────────────────────
 _audit_handler = logging.handlers.RotatingFileHandler(
@@ -58,6 +63,53 @@ if not app.secret_key:
         "FLASK_SECRET_KEY is not set. "
         "Generate one: python -c \"import secrets; print(secrets.token_hex(32))\""
     )
+
+# ─── Daily secret-key rotation ────────────────────────────────────────────────────
+# If MASTER_SECRET is set in .env, derive today's session key from it using HMAC-SHA256.
+# A background thread swaps the key at midnight UTC every day — all sessions from the
+# previous day are automatically invalidated (users log in fresh).
+# MASTER_SECRET itself never changes; only the derived key rotates.
+
+import hmac as _hmac, hashlib as _hashlib
+from datetime import datetime as _datetime, timezone as _tz, timedelta as _td
+
+
+def _derive_daily_key(master: str) -> str:
+    """HMAC-SHA256(master, YYYY-MM-DD-UTC) → 64-char hex string."""
+    date_str = _datetime.now(_tz.utc).strftime("%Y-%m-%d")
+    return _hmac.new(master.encode("utf-8"), date_str.encode("utf-8"), _hashlib.sha256).hexdigest()
+
+
+_master = os.getenv("MASTER_SECRET", "").strip()
+if _master:
+    app.secret_key = _derive_daily_key(_master)
+    logger.info("Session key derived from MASTER_SECRET (daily rotation active).")
+
+    def _midnight_rotation():
+        """Sleep until next UTC midnight then rotate the session key."""
+        while True:
+            now     = _datetime.now(_tz.utc)
+            next_mn = (now + _td(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+            time.sleep((next_mn - now).total_seconds())
+            app.secret_key = _derive_daily_key(_master)
+            audit_logger.info("SESSION_KEY_ROTATED  date=%s", next_mn.strftime("%Y-%m-%d"))
+            logger.info("Session key rotated (daily rotation).")
+
+    threading.Thread(target=_midnight_rotation, daemon=True, name="key-rotation").start()
+
+
+# Return JSON for all unhandled errors so the frontend never sees "Session expired"
+# when the real cause is a server exception or rate limit.
+@app.errorhandler(500)
+def _err500(e):
+    logger.exception("Unhandled 500: %s", e)
+    return jsonify({"reply": "❌ Server error. Check the app logs for details.", "param_card": None, "job_card": None}), 500
+
+
+@app.errorhandler(401)
+@app.errorhandler(403)
+def _err_auth(e):
+    return jsonify({"reply": "⚠️ Not authorised.", "param_card": None, "job_card": None}), e.code
 
 # ─── Session configuration ────────────────────────────────────────────────────────
 # Using Flask's built-in signed-cookie sessions.
@@ -98,6 +150,18 @@ try:
     )
     _LIMITER_AVAILABLE = True
     logger.info("Flask-Limiter initialized")
+
+    # Return JSON on rate-limit so the frontend shows a proper message
+    # instead of treating the 429 HTML as "Session expired"
+    from flask_limiter.errors import RateLimitExceeded as _RateLimitExceeded
+    @app.errorhandler(_RateLimitExceeded)
+    def _handle_rate_limit(e):
+        from flask import jsonify as _jsonify
+        return _jsonify({
+            "reply":      f"⏱️ Slow down — {e.description}",
+            "param_card": None,
+            "job_card":   None,
+        }), 429
 except ImportError:
     _LIMITER_AVAILABLE = False
     logger.warning("flask-limiter not installed — rate limiting disabled")
@@ -151,6 +215,75 @@ _build_jobs: dict[str, dict] = {}
 # Conversation sessions: { sess_key: {"job_name", "schema", ...} }
 _conv_sessions: dict[str, dict] = {}
 
+# User chat sessions: { flask_sid: { chat_id: {"title", "created_at"} } }
+_user_chats: dict[str, dict] = {}
+
+
+# ─── Persistence helpers (survive restarts) ───────────────────────────────────────
+# _user_chats and _conv_sessions are written to flask_sessions/ on every mutation
+# and loaded back at startup so a server restart is transparent to users.
+
+def _save_user_chats() -> None:
+    """Atomically persist _user_chats to disk."""
+    try:
+        tmp = _CHATS_FILE.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(_user_chats, fh)
+        tmp.replace(_CHATS_FILE)
+    except Exception as exc:
+        logger.warning("Could not save user_chats: %s", exc)
+
+
+def _load_user_chats() -> None:
+    """Restore _user_chats from disk on startup."""
+    if not _CHATS_FILE.exists():
+        return
+    try:
+        with open(_CHATS_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            _user_chats.update(data)
+            logger.info("Loaded %d user-chat entries from disk.", len(_user_chats))
+    except Exception as exc:
+        logger.warning("Could not load user_chats: %s", exc)
+
+
+def _save_conv_sessions() -> None:
+    """Atomically persist _conv_sessions to disk (skips non-serialisable entries)."""
+    try:
+        serialisable = {}
+        for key, val in _conv_sessions.items():
+            try:
+                json.dumps(val)
+                serialisable[key] = val
+            except (TypeError, ValueError):
+                pass
+        tmp = _CONV_FILE.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(serialisable, fh)
+        tmp.replace(_CONV_FILE)
+    except Exception as exc:
+        logger.warning("Could not save conv_sessions: %s", exc)
+
+
+def _load_conv_sessions() -> None:
+    """Restore _conv_sessions from disk on startup."""
+    if not _CONV_FILE.exists():
+        return
+    try:
+        with open(_CONV_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            _conv_sessions.update(data)
+            logger.info("Loaded %d conv-session entries from disk.", len(_conv_sessions))
+    except Exception as exc:
+        logger.warning("Could not load conv_sessions: %s", exc)
+
+
+# Load persisted state — must run after the dicts are declared above
+_load_user_chats()
+_load_conv_sessions()
+
 
 # ─── TTL eviction (background thread) ────────────────────────────────────────────
 _ENTRY_TTL_S = int(os.getenv("ENTRY_TTL_HOURS", "24")) * 3600
@@ -187,6 +320,8 @@ def _evict_stale_entries() -> None:
 
         if removed:
             logger.info("TTL eviction removed %d stale entries", removed)
+            _save_user_chats()
+            _save_conv_sessions()
 
 
 threading.Thread(target=_evict_stale_entries, daemon=True, name="ttl-eviction").start()
@@ -347,6 +482,7 @@ def _schema_to_param_card(
     sid: str,
     job_name: str,
     user_message: str,
+    context: list | None = None,
 ) -> dict:
     """
     Given a selected job_name, fetch its parameter schema, run LLM extraction,
@@ -385,7 +521,7 @@ def _schema_to_param_card(
 
     # LLM extraction
     try:
-        llm_result = llm_client.parse_build_request(user_message, schema)
+        llm_result = llm_client.parse_build_request(user_message, schema, context=context)
     except Exception as exc:
         logger.error("LLM extraction failed: %s", exc)
         llm_result = {
@@ -402,6 +538,7 @@ def _schema_to_param_card(
 
     # Persist requested_artifacts for the build thread
     _conv_sessions[sid]["requested_artifacts"] = requested_artifacts
+    _save_conv_sessions()
 
     final_params, source_map, still_missing = _merge_params(llm_params, schema)
 
@@ -467,6 +604,7 @@ def _build_job_browser_response(sid: str, filters: dict, jobs_all: list[dict]) -
     conv = _conv_sessions.setdefault(sid, {})
     conv["job_browser_filters"] = filters
     conv["job_browser_active"]  = True
+    _save_conv_sessions()
 
     total      = result["total"]
     page       = result["page"]
@@ -519,7 +657,7 @@ def _build_job_browser_response(sid: str, filters: dict, jobs_all: list[dict]) -
 
 # ─── Query handler: Jenkins info / management actions ────────────────────────────
 
-def _handle_query(sid: str, user_message: str) -> dict:
+def _handle_query(sid: str, user_message: str, context: list | None = None) -> dict:
     """
     Handle Jenkins management / info queries.
     Detects the action via LLM (parse_jenkins_query) then dispatches.
@@ -549,6 +687,7 @@ def _handle_query(sid: str, user_message: str) -> dict:
                 "search_query":   search_query,
             },
         }
+        _save_conv_sessions()
         return {
             "reply":      prompt,
             "param_card": None,
@@ -581,7 +720,7 @@ def _handle_query(sid: str, user_message: str) -> dict:
     view_names = [v["name"] for v in views]
 
     # ── Parse the query intent ────────────────────────────────────────────────────
-    parsed       = llm_client.parse_jenkins_query(user_message, job_names, view_names)
+    parsed       = llm_client.parse_jenkins_query(user_message, job_names, view_names, context=context or [])
     action       = parsed["action"]
     job_name       = parsed["job_name"]
     build_number   = parsed["build_number"]
@@ -603,6 +742,9 @@ def _handle_query(sid: str, user_message: str) -> dict:
         filters = _browser_filters_from_session(sid)
         if action == "search_jobs" and search_query:
             filters["q"] = search_query
+        # Apply status filter from LLM (e.g. "list failed jobs" → status=FAILURE)
+        if parsed.get("status"):
+            filters["status"] = parsed["status"]
         filters["page"] = 1
         return _build_job_browser_response(sid, filters, jobs)
 
@@ -1036,14 +1178,16 @@ def _handle_query(sid: str, user_message: str) -> dict:
 
 # ─── Phase 1: message → job discovery → job select or param card ──────────────────
 
-def _handle_message(sid: str, user_message: str) -> dict:
+def _handle_message(sid: str, user_message: str, context: list | None = None) -> dict:
     from services import jenkins_client, llm_client
     from services.jenkins_client import JenkinsDownError, JenkinsError
+
+    ctx = context or []   # prior conversation turns for LLM
 
     # ── Fast intent check — skip Jenkins entirely for general chat ──────────────
     intent = llm_client.detect_intent(user_message)
     if intent == "chat":
-        reply = llm_client.general_chat_response(user_message)
+        reply = llm_client.general_chat_response(user_message, context=ctx)
         return {"reply": reply, "param_card": None, "job_card": None}
 
     # ── Job browser is active — user is navigating / filtering ──────────────────
@@ -1088,7 +1232,7 @@ def _handle_message(sid: str, user_message: str) -> dict:
         return _build_job_browser_response(sid, filters, all_jobs)
 
     if intent == "query":
-        return _handle_query(sid, user_message)
+        return _handle_query(sid, user_message, ctx)
 
     # ── Build intent → proceed with Jenkins flow ────────────────────────────────
     if not jenkins_client.check_jenkins_alive():
@@ -1121,16 +1265,50 @@ def _handle_message(sid: str, user_message: str) -> dict:
 
     # ── Single job — skip LLM selection entirely ────────────────────────────────
     if len(jobs) == 1:
-        return _schema_to_param_card(sid, jobs[0]["name"], user_message)
+        return _schema_to_param_card(sid, jobs[0]["name"], user_message, context=ctx)
+
+    # ── Vague message — skip LLM, show job picker immediately ───────────────────
+    # If the message is just "build" / "trigger" / "deploy" with no repo URL,
+    # branch, or job hint, asking the LLM to pick a job will give a random guess.
+    # Show the picker directly and ask the user to provide details.
+    _HAS_DETAILS_RE = re.compile(
+        r'https?://|/hotfix/|/release/|/feature/|/fix/'
+        r'|branch\s+\S|from\s+https?'
+        r'|\b(hotfix|release|feature|fix)/\S',
+        re.IGNORECASE,
+    )
+    _is_vague = (
+        len(user_message.strip().split()) <= 3
+        and not _HAS_DETAILS_RE.search(user_message)
+    )
+    if _is_vague:
+        _conv_sessions[sid] = {
+            "job_name":       None,
+            "last_message":   user_message,
+            "available_jobs": jobs,
+        }
+        _save_conv_sessions()
+        return {
+            "reply": (
+                "Which job should I trigger?\n\n"
+                "Or type a full request like:\n"
+                "`build hotfix/PAY-1 from https://github.com/acme/repo`"
+            ),
+            "param_card": None,
+            "job_card": [
+                {"name": j["name"], "description": j.get("description", ""), "status": j.get("status", "")}
+                for j in jobs
+            ],
+        }
 
     # ── Multiple jobs — let LLM pick ────────────────────────────────────────────
-    selection = llm_client.select_job(user_message, jobs)
+    selection = llm_client.select_job(user_message, jobs, context=ctx)
     job_name  = selection.get("job_name")
     confidence = selection.get("confidence", "low")
 
     if job_name and confidence == "high":
         logger.info("LLM selected job %r with high confidence: %s", job_name, selection.get("reason"))
-        return _schema_to_param_card(sid, job_name, user_message)
+        return _schema_to_param_card(sid, job_name, user_message, context=ctx)
 
     # ── Ambiguous — show job picker card ────────────────────────────────────────
     logger.info(
@@ -1144,6 +1322,7 @@ def _handle_message(sid: str, user_message: str) -> dict:
         "last_message":    user_message,
         "available_jobs":  jobs,
     }
+    _save_conv_sessions()
 
     hint = ""
     if job_name:
@@ -1371,6 +1550,7 @@ def _handle_job_select(sid: str, job_name: str) -> dict:
         # User picked a job to answer a query — not to trigger a build
         msg = conv.get("last_message", "")
         _conv_sessions.pop(sid, None)   # clear so a subsequent build request starts fresh
+        _save_conv_sessions()
         return _resume_query(sid, job_name, pending, msg)
 
     # Normal build flow
@@ -1632,7 +1812,14 @@ def chat():
         user_message = data.get("message", "").strip()[:2000]   # max 2000 chars
         if not user_message:
             return jsonify({"reply": "Please type a build request.", "param_card": None, "job_card": None})
-        return jsonify(_handle_message(sess_key, user_message))
+        # Extract conversation context sent by the frontend (last 3 turns)
+        raw_ctx = data.get("context", [])
+        context = [
+            {"role": c["role"], "content": str(c.get("content", ""))[:300]}
+            for c in raw_ctx
+            if isinstance(c, dict) and c.get("role") in ("user", "assistant") and c.get("content")
+        ][-6:]   # cap at 6 messages (3 turns)
+        return jsonify(_handle_message(sess_key, user_message, context=context))
 
     # ── Phase 1b: dev selected a job from the picker ────────────────────────────
     if msg_type == "job_select":
@@ -1868,10 +2055,6 @@ def service_status():
 
 # ─── Chat session management ─────────────────────────────────────────────────────
 
-# User chat sessions: { flask_sid: { chat_id: {"title", "created_at"} } }
-_user_chats: dict[str, dict] = {}
-
-
 @app.route("/sessions", methods=["GET"])
 @require_auth
 def list_chat_sessions():
@@ -1899,6 +2082,7 @@ def new_chat_session():
         "title":      "New chat",
         "created_at": _time.time(),
     }
+    _save_user_chats()
     return jsonify({"chat_id": chat_id})
 
 
@@ -1910,6 +2094,7 @@ def rename_chat_session(chat_id: str):
     data = request.get_json(force=True)
     if sid in _user_chats and chat_id in _user_chats[sid]:
         _user_chats[sid][chat_id]["title"] = data.get("title", "Chat")[:60]
+    _save_user_chats()
     return jsonify({"ok": True})
 
 
@@ -1922,6 +2107,8 @@ def delete_chat_session(chat_id: str):
         _user_chats[sid].pop(chat_id, None)
     # Clean up the conversation session for this chat
     _conv_sessions.pop(f"{sid}:{chat_id}", None)
+    _save_user_chats()
+    _save_conv_sessions()
     return jsonify({"ok": True})
 
 

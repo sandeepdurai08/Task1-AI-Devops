@@ -406,13 +406,28 @@ def can_view_builds() -> bool:
 
 def _IDLE_TIMEOUT_S() -> int:
     """Idle session timeout in seconds. Configurable via SESSION_IDLE_TIMEOUT_MIN (.env)."""
-    return int(os.getenv("SESSION_IDLE_TIMEOUT_MIN", "60")) * 60
+    return int(os.getenv("SESSION_IDLE_TIMEOUT_MIN", "480")) * 60
 
 
-def _check_and_refresh_idle(redirect_url: str) -> None | object:
+def _is_api_request() -> bool:
     """
-    Check if the session has been idle too long. If so, clear it and return a redirect.
-    Otherwise update last_active and return None (continue).
+    Return True if this is a JSON API call (not a browser page navigation).
+    API routes should receive a 401 JSON response on auth failure, not an HTML redirect,
+    so the frontend can distinguish genuine session expiry from server restarts.
+    """
+    _API_PREFIXES = (
+        "/chat", "/sessions", "/api/", "/build-status/",
+        "/admin/api/", "/me", "/status", "/debug-session",
+    )
+    return request.is_json or request.path.startswith(_API_PREFIXES)
+
+
+def _check_and_refresh_idle() -> None | object:
+    """
+    Check if the session has been idle too long.
+    - API requests  → returns a 401 JSON {"error": "auth_required"} response.
+    - Page requests → returns an HTML redirect to /login.
+    - Not expired   → updates last_active and returns None (caller continues).
     """
     last = session.get("last_active")
     now  = time.time()
@@ -426,7 +441,10 @@ def _check_and_refresh_idle(redirect_url: str) -> None | object:
         username = session.get("auth_user", "unknown")
         logger.info("Session expired (idle timeout) for user %r", username)
         session.clear()
-        return redirect(redirect_url)
+        if _is_api_request():
+            from flask import jsonify as _j
+            return _j({"error": "auth_required", "redirect": "/login"}), 401
+        return redirect(url_for("login_page"))
 
     session["last_active"] = now
     return None
@@ -435,14 +453,23 @@ def _check_and_refresh_idle(redirect_url: str) -> None | object:
 # ─── Flask decorators ─────────────────────────────────────────────────────────────
 
 def require_auth(fn):
-    """Redirect to login if not authenticated or session has timed out. No-op when AUTH_ENABLED=false."""
+    """
+    Protect a route: unauthenticated or timed-out requests are rejected.
+    - API/JSON routes receive a 401 JSON response (so the frontend can tell the
+      difference between a genuine auth failure and a server restart).
+    - Browser page routes receive an HTML redirect to /login.
+    No-op when AUTH_ENABLED=false.
+    """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not auth_enabled():
             return fn(*args, **kwargs)
         if not is_logged_in():
+            if _is_api_request():
+                from flask import jsonify as _j
+                return _j({"error": "auth_required", "redirect": "/login"}), 401
             return redirect(url_for("login_page", next=request.url))
-        result = _check_and_refresh_idle(url_for("login_page", next=request.url))
+        result = _check_and_refresh_idle()
         if result is not None:
             return result
         return fn(*args, **kwargs)
@@ -450,14 +477,22 @@ def require_auth(fn):
 
 
 def require_admin(fn):
-    """Require role=admin. Returns 403 JSON for /admin/api/* routes."""
+    """
+    Require role=admin.
+    - /admin/api/* routes → 403 JSON on insufficient role.
+    - API/JSON routes     → 401 JSON when not authenticated.
+    - Browser pages       → redirect to /login or /index.
+    """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not auth_enabled():
             return fn(*args, **kwargs)
         if not is_logged_in():
+            if _is_api_request():
+                from flask import jsonify as _j
+                return _j({"error": "auth_required", "redirect": "/login"}), 401
             return redirect(url_for("login_page", next=request.url))
-        result = _check_and_refresh_idle(url_for("login_page", next=request.url))
+        result = _check_and_refresh_idle()
         if result is not None:
             return result
         user = current_user()
