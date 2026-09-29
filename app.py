@@ -1803,6 +1803,9 @@ def chat():
     sid      = _get_sid()
     user     = current_user()
     data     = request.get_json(force=True)
+    if data is None:
+        logger.warning("POST /chat — could not parse JSON body (empty or malformed request)")
+        return jsonify({"reply": "⚠️ Request body was empty or could not be parsed. Please try again.", "param_card": None, "job_card": None}), 400
     msg_type = data.get("type", "message")
     chat_id  = data.get("chat_id", "default")
     sess_key = f"{sid}:{chat_id}"
