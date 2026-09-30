@@ -314,7 +314,7 @@ def select_job(user_message: str, jobs: list[dict], context: list | None = None)
         job_lines.append(f"  - {j['name']}{desc}")
     catalogue = "\n".join(job_lines)
 
-    system = f"""You are BuildBot. Select the single most appropriate Jenkins job for the developer's request.
+    system = f"""You are BuildBot. Select the single most appropriate Jenkins job for the developer's BUILD request.
 
 Available jobs:
 {catalogue}
@@ -322,7 +322,17 @@ Available jobs:
 Return ONLY a JSON object:
 {{"job_name": "<exact name or null>", "confidence": "high" or "low", "reason": "<one sentence>"}}
 
-Rules: job_name must be from the list or null. high confidence = one job clearly fits. No prose, raw JSON only."""
+Rules:
+- job_name must be an exact name from the list, or null.
+- high confidence = one job clearly fits the BUILD REQUEST based on its description and purpose.
+- low confidence or null = when it is unclear which job to trigger.
+- CRITICAL: Do NOT match words in the user's message to words in the job name. For example, if the
+  user says "check which job..." do NOT pick a job called "check job" — that is a coincidental word
+  match, not a genuine fit.
+- If the user is ASKING A QUESTION about jobs (e.g. "which job uses this URL?", "check which job
+  has...") rather than requesting a build, return null with confidence low.
+- Base your selection ONLY on what the job is designed to DO (its description) versus what the user
+  wants to BUILD. No prose, raw JSON only."""
 
     messages = [
         {"role": "system", "content": system},
@@ -476,6 +486,10 @@ _QUERY_KEYWORDS = [
 
     # ── Search jobs ─────────────────────────────────────────────────────────────
     r'\bsearch\s+(?:for\s+)?jobs?\b', r'\bfind\s+(?:a\s+)?jobs?\b',
+    r'\bwhich\s+job\b',                          # "which job has / uses / is"
+    r'\bcheck\s+which\s+job\b',                  # "check which job has [URL]"
+    r'\bwhat\s+job\s+(?:has|uses|is|runs|builds?)\b',  # "what job has this URL"
+    r'\bfind\s+which\s+job\b',                   # "find which job uses this repo"
 
     # ── Running builds (Group A) ─────────────────────────────────────────────────
     r'\brunning\s+builds?\b', r'\bwhat.*(?:is|are).*building\b',
@@ -530,6 +544,26 @@ _QUERY_KEYWORDS = [
     # ── Plugins (Group B) ────────────────────────────────────────────────────────
     r'\bplugins?\b', r'\binstalled\s+plugins?\b', r'\bjenkins\s+plugins?\b',
     r'\blist\s+plugins?\b', r'\bshow\s+plugins?\b',
+
+    # ── Advanced / deep search (repo URL, endpoint, parameter value, folder) ─────
+    r'\bjobs?\s+(using|with|for|by|containing)\s+\S',   # "jobs using X", "jobs with Y=Z"
+    r'\b(search|find)\s+jobs?\s+(with|using|for|by|containing)\b',
+    r'\b(show|list)\s+(pipeline|freestyle|multibranch)\s+jobs?\b',
+    r'\bjobs?\s+in\s+(folder|directory|group|team|namespace)\b',
+    r'\bjobs?\s+(in|from)\s+(?:the\s+)?\w+\s+(folder|group|team)\b',
+    r'\bpipeline\s+jobs?\b', r'\bfreestyle\s+jobs?\b', r'\bmultibranch\s+jobs?\b',
+    # Bare IP address or explicit parameter name in query — strong search signal
+    r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b',
+    r'\b(ENV_TYPE|AWS_REGION|CLUSTER_NAME|GITHUB_URL|REPO_URL|GIT_URL|BRANCH)\b',
+    r'\bjobs?\s+with\s+parameter\b', r'\bjobs?\s+that\s+use\b',
+    r'\bjobs?\s+(?:pointing|linked|connected)\s+to\b',
+    r'\bfind\s+jobs?\s+(?:for|with|using)\b',
+
+    # ── Index / search-index status ───────────────────────────────────────────────
+    r'\bsearch\s+index\b', r'\bindex\s+status\b', r'\bjobs?\s+indexed\b',
+    r'\bhow\s+many\s+jobs\s+(are\s+)?(indexed|in\s+the\s+index)\b',
+    r'\brefresh\s+(?:the\s+)?(?:search\s+)?index\b',
+    r'\bwhen\s+(?:was|is)\s+(?:the\s+)?index\b',
 ]
 _QUERY_RE = re.compile("|".join(_QUERY_KEYWORDS), re.IGNORECASE)
 
@@ -615,7 +649,8 @@ list_jobs | list_views | list_jobs_in_view | stop_build | who_triggered |
 permissions | list_artifacts | console_log | sftp_path | analyze_failure |
 search_jobs | list_running_builds | list_build_history | retry_build |
 list_queue | list_agents | list_build_changes | compare_builds |
-search_failed_builds | get_jenkins_info | list_plugins | unknown
+search_failed_builds | get_jenkins_info | list_plugins |
+deep_search | index_status | unknown
 
 Common phrasings:
 - "who build/built/ran/triggered/did" → who_triggered
@@ -640,6 +675,12 @@ Common phrasings:
 - "failed builds / failure history / builds that failed" → search_failed_builds
 - "Jenkins version / Jenkins info / Jenkins health" → get_jenkins_info
 - "plugins / installed plugins" → list_plugins
+- "find/show jobs using <repo URL or IP>" → deep_search
+- "jobs with ENV_TYPE=prod / AWS_REGION us-east-1 / CLUSTER_NAME prod-k8s" → deep_search
+- "pipeline jobs / freestyle jobs / multibranch jobs" → deep_search
+- "jobs in folder <name> / jobs for repo <url>" → deep_search
+- "jobs with parameter <name>=<value>" → deep_search
+- "search index status / how many jobs indexed / refresh index" → index_status
 
 Return ONLY a JSON object (no prose):
 {"action":"...","job_name":null,"build_number":null,"view_name":null,"lines":50,"search_query":null,"build_number_b":null,"count":10,"status":""}
@@ -762,7 +803,7 @@ _JOB_FILTER_SYSTEM = """You are BuildBot. Parse a job browser filter command.
 Current filters: {current_json}
 
 Return ONLY JSON:
-{"action":"filter|next|prev|page_N|clear|select","status":"","hotfix":false,"q":"","repo":"","branch":"","sort":"","select_job":null}
+{"action":"filter|next|prev|page_N|clear|select","status":"","hotfix":false,"q":"","repo":"","branch":"","sort":"","folder":"","job_type":"","env_type":"","aws_region":"","cluster_name":"","param_name":"","param_value":"","select_job":null}
 
 action values:
 - "filter": apply/change filters
@@ -773,7 +814,14 @@ action values:
 - "select": user named a specific job (set select_job to the job name)
 
 status values: FAILURE|SUCCESS|BUILDING|UNSTABLE|ALL (empty = no change)
-sort values: name|status|failed|duration (empty = no change)
+sort values: name|status|failed|duration|folder (empty = no change)
+job_type values: pipeline|freestyle|multibranch (empty = no change)
+folder: folder name/path substring to filter by (empty = no change)
+env_type: ENV_TYPE parameter value substring (empty = no change)
+aws_region: AWS_REGION parameter value substring (empty = no change)
+cluster_name: CLUSTER_NAME parameter value substring (empty = no change)
+param_name: specific parameter name to filter by (empty = no change)
+param_value: specific parameter default value substring (empty = no change)
 Leave fields empty/null/false if not mentioned."""
 
 
@@ -820,14 +868,21 @@ def parse_job_filter_update(message: str, current_filters: dict) -> dict:
         return {"action": "filter"}
 
     return {
-        "action":     result.get("action", "filter"),
-        "status":     result.get("status", ""),
-        "hotfix":     bool(result.get("hotfix", False)),
-        "q":          result.get("q", ""),
-        "repo":       result.get("repo", ""),
-        "branch":     result.get("branch", ""),
-        "sort":       result.get("sort", ""),
-        "select_job": result.get("select_job"),
+        "action":       result.get("action", "filter"),
+        "status":       result.get("status", ""),
+        "hotfix":       bool(result.get("hotfix", False)),
+        "q":            result.get("q", ""),
+        "repo":         result.get("repo", ""),
+        "branch":       result.get("branch", ""),
+        "sort":         result.get("sort", ""),
+        "folder":       result.get("folder", ""),
+        "job_type":     result.get("job_type", ""),
+        "env_type":     result.get("env_type", ""),
+        "aws_region":   result.get("aws_region", ""),
+        "cluster_name": result.get("cluster_name", ""),
+        "param_name":   result.get("param_name", ""),
+        "param_value":  result.get("param_value", ""),
+        "select_job":   result.get("select_job"),
     }
 
 
@@ -892,3 +947,212 @@ def llm_analyze_build_failure(console_lines: list[str], result: str) -> dict:
         regex_result = _regex_analyze(console_lines)
         regex_result["source"] = "regex"
         return regex_result
+
+
+# ─── Advanced / deep job search — structured filter extraction ────────────────────
+
+_SEARCH_QUERY_SYSTEM = """You are BuildBot. Extract structured Jenkins job-search filters from a developer's query.
+
+Return ONLY a JSON object — no prose, no markdown:
+{
+  "q":           "",   // free-text fallback (use when no specific filter matches)
+  "repo":        "",   // git repo URL, GitHub URL, hostname, IP, domain, or endpoint fragment
+  "branch":      "",   // branch name or pattern
+  "status":      "",   // SUCCESS | FAILURE | BUILDING | UNSTABLE | ABORTED  (empty = all)
+  "hotfix":      false,
+  "folder":      "",   // folder/group name or path prefix
+  "job_type":    "",   // pipeline | freestyle | multibranch  (empty = all)
+  "param_name":  "",   // filter by a specific parameter name (exact, e.g. "BRANCH")
+  "param_value": "",   // filter by any parameter default containing this value
+  "env_type":    "",   // ENV_TYPE parameter value (e.g. "prod", "staging")
+  "aws_region":  "",   // AWS_REGION parameter value (e.g. "us-east-1")
+  "cluster_name":"",   // CLUSTER_NAME parameter value (e.g. "prod-k8s")
+  "sort":        ""    // name | status | failed | duration | folder  (empty = name)
+}
+
+Rules:
+- Set "hotfix": true when the query mentions hotfix, HF, or patch.
+- Set "repo" for any URL, hostname, IP address, domain, or repo name fragment.
+- Set "status" to FAILURE when query says "failed", "broken", "red".
+- Set "status" to BUILDING when query says "running", "building", "in progress".
+- Only set fields explicitly mentioned; leave everything else empty/false.
+- If the query is too vague to extract any filter, put the whole query in "q".
+- NEVER invent values. If uncertain, use "q" as the fallback."""
+
+
+def parse_search_query(message: str, context: list | None = None) -> dict:
+    """
+    Use the LLM to extract structured search filters from a natural-language query.
+    Falls back gracefully — on any LLM failure the whole message becomes "q"
+    so the full-text search still runs.
+
+    Parameters
+    ----------
+    message : The user's natural-language search query.
+    context : Optional prior conversation turns for context.
+
+    Returns
+    -------
+    {
+        "q":           str,
+        "repo":        str,
+        "branch":      str,
+        "status":      str,
+        "hotfix":      bool,
+        "folder":      str,
+        "job_type":    str,
+        "param_name":  str,
+        "param_value": str,
+        "env_type":    str,
+        "aws_region":  str,
+        "cluster_name": str,
+        "sort":        str,
+        "_source":     "llm" | "fallback",
+    }
+    Never raises.
+    """
+    _DEFAULTS: dict = {
+        "q": "", "repo": "", "branch": "", "status": "", "hotfix": False,
+        "folder": "", "job_type": "", "param_name": "", "param_value": "",
+        "env_type": "", "aws_region": "", "cluster_name": "", "sort": "",
+    }
+
+    model = os.getenv("LLM_MODEL", "")
+    ctx_msgs = [
+        {"role": m["role"], "content": m["content"][:300]}
+        for m in (context or [])[-4:]
+    ]
+
+    messages = [
+        {"role": "system", "content": _SEARCH_QUERY_SYSTEM},
+        *ctx_msgs,
+        {"role": "user", "content": f"/no_think\n{message}"},
+    ]
+
+    def _call() -> str:
+        client = get_client()
+        response = client.chat.completions.create(
+            model=model, messages=messages, temperature=0, max_tokens=120,
+        )
+        return response.choices[0].message.content or ""
+
+    raw = ""
+    try:
+        raw    = _call()
+        result = _extract_json(raw)
+    except Exception as exc:
+        logger.warning("parse_search_query LLM attempt failed (%s) — regex fallback", exc)
+        # ── Regex fallback: extract a few obvious signals without the LLM ────────
+        return _search_query_regex_fallback(message)
+
+    # ── Post-process: normalise types, strip nulls ────────────────────────────────
+    out = dict(_DEFAULTS)
+    for k in _DEFAULTS:
+        v = result.get(k)
+        if v is None:
+            continue
+        if k == "hotfix":
+            out[k] = bool(v)
+        else:
+            out[k] = str(v).strip()
+
+    # Validate status
+    _VALID_STATUS = {"SUCCESS", "FAILURE", "BUILDING", "UNSTABLE", "ABORTED", ""}
+    if out["status"].upper() not in _VALID_STATUS:
+        out["status"] = ""
+    else:
+        out["status"] = out["status"].upper()
+
+    # Validate job_type
+    if out["job_type"].lower() not in ("pipeline", "freestyle", "multibranch", ""):
+        out["job_type"] = ""
+    else:
+        out["job_type"] = out["job_type"].lower()
+
+    # Validate sort
+    if out["sort"].lower() not in ("name", "status", "failed", "duration", "folder", ""):
+        out["sort"] = ""
+
+    # If LLM set nothing meaningful, use the full message as free-text
+    meaningful = any(
+        v for k, v in out.items()
+        if k != "sort" and v and v is not False
+    )
+    if not meaningful:
+        out["q"] = message.strip()
+
+    out["_source"] = "llm"
+    logger.debug("parse_search_query → %s", {k: v for k, v in out.items() if v})
+    return out
+
+
+def _search_query_regex_fallback(message: str) -> dict:
+    """
+    Pure-regex extraction when the LLM is unavailable.
+    Catches the most common patterns without any model call.
+    """
+    msg = message.strip()
+    out: dict = {
+        "q": "", "repo": "", "branch": "", "status": "", "hotfix": False,
+        "folder": "", "job_type": "", "param_name": "", "param_value": "",
+        "env_type": "", "aws_region": "", "cluster_name": "", "sort": "",
+        "_source": "fallback",
+    }
+
+    ml = msg.lower()
+
+    # Status
+    if any(w in ml for w in ("failed", "failure", "broken", "red")):
+        out["status"] = "FAILURE"
+    elif any(w in ml for w in ("running", "building", "in progress")):
+        out["status"] = "BUILDING"
+    elif "success" in ml or "green" in ml:
+        out["status"] = "SUCCESS"
+    elif "unstable" in ml:
+        out["status"] = "UNSTABLE"
+
+    # Hotfix
+    if re.search(r'\b(hotfix|hf)\b|hot[\-_]fix|\bpatch\b', msg, re.IGNORECASE):
+        out["hotfix"] = True
+
+    # Job type
+    if "pipeline" in ml:
+        out["job_type"] = "pipeline"
+    elif "freestyle" in ml:
+        out["job_type"] = "freestyle"
+    elif "multibranch" in ml:
+        out["job_type"] = "multibranch"
+
+    # URL / hostname / IP → repo
+    url_m = re.search(r'https?://\S+|(?:\b[\w\-]+\.[\w\-]+\.[a-z]{2,}\b)', msg)
+    ip_m  = re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', msg)
+    if url_m:
+        out["repo"] = url_m.group(0)
+    elif ip_m:
+        out["repo"] = ip_m.group(0)
+
+    # Explicit parameter name queries: "ENV_TYPE=prod", "AWS_REGION us-east-1"
+    env_m = re.search(r'ENV_TYPE\s*[=:]\s*(\S+)', msg, re.IGNORECASE)
+    if env_m:
+        out["env_type"] = env_m.group(1).strip("\"'")
+
+    reg_m = re.search(r'AWS_REGION\s*[=:]\s*(\S+)', msg, re.IGNORECASE)
+    if reg_m:
+        out["aws_region"] = reg_m.group(1).strip("\"'")
+
+    cls_m = re.search(r'CLUSTER_NAME\s*[=:]\s*(\S+)', msg, re.IGNORECASE)
+    if cls_m:
+        out["cluster_name"] = cls_m.group(1).strip("\"'")
+
+    # Folder
+    fld_m = re.search(r'\b(?:in\s+|from\s+|folder\s+|group\s+)(\w[\w\-/]+)', msg, re.IGNORECASE)
+    if fld_m and not out["job_type"]:   # avoid confusing "in pipeline" as a folder
+        candidate = fld_m.group(1)
+        if candidate.lower() not in ("the", "a", "an", "this", "that", "folder", "group"):
+            out["folder"] = candidate
+
+    # If nothing specific extracted, use entire message as free-text
+    if not any(v for k, v in out.items() if k not in ("sort", "_source") and v and v is not False):
+        out["q"] = msg
+
+    return out

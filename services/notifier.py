@@ -1,11 +1,25 @@
 """
 services/notifier.py
 ────────────────────
-Build completion notifications for BuildBot.
+Build-completion notifications for BuildBot.
 
-  send_gchat_build_result(...)  → Rich Google Chat cardsV2 notification
-  send_gchat(message)           → Simple text fallback
-  send_email(subject, body)     → SMTP via MailHog
+Public API
+──────────
+    send_gchat_build_result(...)  → bool   rich Google Chat card  (v1 cards format)
+    send_gchat(message)           → bool   plain-text fallback
+    send_email(subject, body)     → bool   SMTP (MailHog or real server)
+
+All functions return True on success, False on any failure, and never raise.
+Failures are logged as WARNING with the HTTP status / error text so you can
+see exactly what went wrong in the app console.
+
+Why v1 cards (not cardsV2)?
+────────────────────────────
+Incoming webhook URLs  (https://chat.googleapis.com/v1/spaces/.../messages?key=…)
+only accept the **v1** card format.  The `cardsV2` schema is exclusively for
+Chat Bot API calls authenticated with a service-account token.  Sending
+`cardsV2` to a webhook always returns HTTP 400 — silently dropped here
+previously.
 """
 
 import logging
@@ -19,12 +33,12 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-# ─── Google Chat — Rich Card ──────────────────────────────────────────────────────
+# ─── Google Chat — v1 Card (webhook-compatible) ───────────────────────────────────
 
 def send_gchat_build_result(
     job_name:           str,
     build_number:       int,
-    result:             str,        # "SUCCESS" | "FAILURE" | "ABORTED" | "UNSTABLE"
+    result:             str,        # "SUCCESS" | "FAILURE" | "UNSTABLE" | "ABORTED"
     duration_str:       str,
     build_url:          str         = "",
     artifact_path:      str         = "",
@@ -33,314 +47,214 @@ def send_gchat_build_result(
     failure_cause:      str         = "",
     failure_suggestion: str         = "",
     triggered_by:       str         = "unknown",
-    build_params:       dict        = None,   # {GITHUB_URL, BRANCH, ...}
-) -> None:
+    build_params:       dict        = None,
+) -> bool:
     """
-    Post a rich Google Chat card notification using cardsV2 format.
-    Falls back to plain text if webhook is not set.
+    Post a rich v1-cards notification to the configured Google Chat webhook.
+
+    Returns True if Google Chat accepted it (HTTP 200), False otherwise.
+    Uses the v1 card format — the only format accepted by incoming webhooks.
     """
     webhook_url = os.getenv("GCHAT_WEBHOOK", "").strip()
     if not webhook_url:
         logger.warning("GCHAT_WEBHOOK not set — skipping Google Chat notification.")
-        return
+        return False
 
-    staged_files   = staged_files   or []
+    staged_files    = staged_files    or []
     not_found_files = not_found_files or []
-    build_params   = build_params   or {}
+    build_params    = build_params    or {}
 
     is_success  = result == "SUCCESS"
     is_unstable = result == "UNSTABLE"
     is_aborted  = result == "ABORTED"
-    is_failure  = not is_success and not is_unstable and not is_aborted
+    is_failure  = result == "FAILURE"
 
-    # ── Status meta ──────────────────────────────────────────────────────────────
-    status_icon  = "✅" if is_success else ("⚠️" if is_unstable else ("🚫" if is_aborted else "❌"))
+    status_icon = (
+        "✅" if is_success  else
+        "⚠️" if is_unstable else
+        "🚫" if is_aborted  else "❌"
+    )
     status_label = {
         "SUCCESS":  "Build Succeeded",
         "FAILURE":  "Build Failed",
         "UNSTABLE": "Build Unstable",
         "ABORTED":  "Build Aborted",
-    }.get(result, f"Build {result.capitalize()}")
-
-    # Header background color (Google Chat hex string)
-    header_color_hex = {
-        "SUCCESS":  "#16a34a",
-        "FAILURE":  "#dc2626",
-        "UNSTABLE": "#d97706",
-        "ABORTED":  "#6b7280",
-    }.get(result, "#4f46e5")
+    }.get(result, f"Build {result}")
 
     console_url = (build_url.rstrip("/") + "/console") if build_url else ""
 
-    # ════════════════════════════════════════════════════════════════════════════
-    #  SECTION 1 — Build summary (always shown)
-    # ════════════════════════════════════════════════════════════════════════════
-    summary_widgets = [
-        {
-            "columns": {
-                "columnItems": [
-                    {
-                        "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
-                        "widgets": [{
-                            "decoratedText": {
-                                "topLabel": "Job",
-                                "text":     f"<b>{job_name}</b>",
-                                "startIcon": {"knownIcon": "BOOKMARK"},
-                            }
-                        }],
-                    },
-                    {
-                        "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
-                        "widgets": [{
-                            "decoratedText": {
-                                "topLabel": "Build",
-                                "text":     f"<b>#{build_number}</b>",
-                                "startIcon": {"knownIcon": "INVITE"},
-                            }
-                        }],
-                    },
-                    {
-                        "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
-                        "widgets": [{
-                            "decoratedText": {
-                                "topLabel": "Duration",
-                                "text":     duration_str or "—",
-                                "startIcon": {"knownIcon": "CLOCK"},
-                            }
-                        }],
-                    },
-                ]
-            }
-        },
-        {
-            "decoratedText": {
-                "topLabel":  "Triggered by",
-                "text":      triggered_by,
-                "startIcon": {"knownIcon": "PERSON"},
-            }
-        },
-    ]
+    # ── Section 1: summary key-value rows ────────────────────────────────────────
+    widgets = []
 
-    # Build parameters row (branch / repo)
+    widgets.append({"keyValue": {
+        "topLabel": "Job",
+        "content":  f"<b>{job_name}</b>",
+        "icon":     "BOOKMARK",
+    }})
+    widgets.append({"keyValue": {
+        "topLabel": "Build",
+        "content":  f"<b>#{build_number}</b>  ·  {duration_str or '—'}",
+        "icon":     "INVITE",
+    }})
+    widgets.append({"keyValue": {
+        "topLabel": "Triggered by",
+        "content":  triggered_by,
+        "icon":     "PERSON",
+    }})
+
+    # Build parameters (branch + repo + extras)
     if build_params:
-        param_parts = []
+        parts: list[str] = []
         if build_params.get("BRANCH"):
-            param_parts.append(f"Branch: <b>{build_params['BRANCH']}</b>")
+            parts.append(f"Branch: <b>{build_params['BRANCH']}</b>")
         if build_params.get("GITHUB_URL"):
             repo = build_params["GITHUB_URL"].replace("https://github.com/", "")
-            param_parts.append(f"Repo: <b>{repo}</b>")
+            parts.append(f"Repo: <b>{repo}</b>")
         for k, v in build_params.items():
             if k not in ("GITHUB_URL", "BRANCH") and v not in (None, "", [], True, False):
-                param_parts.append(f"{k}: <b>{v}</b>")
-        if param_parts:
-            summary_widgets.append({
-                "decoratedText": {
-                    "topLabel":  "Parameters",
-                    "text":      "  •  ".join(param_parts),
-                    "startIcon": {"knownIcon": "DESCRIPTION"},
-                }
-            })
+                parts.append(f"{k}: <b>{v}</b>")
+        if parts:
+            widgets.append({"keyValue": {
+                "topLabel":    "Parameters",
+                "content":     "  ·  ".join(parts),
+                "contentMultiline": True,
+                "icon":        "DESCRIPTION",
+            }})
 
-    # ════════════════════════════════════════════════════════════════════════════
-    #  SECTION 2 — Artifacts (SUCCESS / UNSTABLE)
-    # ════════════════════════════════════════════════════════════════════════════
-    artifact_widgets = []
+    # Artifacts (SUCCESS / UNSTABLE)
     if artifact_path and (is_success or is_unstable):
         if staged_files:
-            # Show individual files with clickable download buttons (up to 5 buttons)
-            shown_btn  = [f for f in staged_files if f.get("download_url")][:5]
-            shown_text = [f for f in staged_files if not f.get("download_url")]
-
-            text_lines = ""
-            if shown_text:
-                text_lines = "".join(f"📄 <b>{f['name']}</b><br>" for f in shown_text[:8])
+            file_list = "\n".join(
+                f"  • {f['name']}" for f in staged_files[:8]
+            )
             if len(staged_files) > 8:
-                text_lines += f"<i>… and {len(staged_files)-8} more file(s)</i><br>"
-
-            artifact_widgets.append({
-                "textParagraph": {
-                    "text": (
-                        f"<b>📦 {len(staged_files)} artifact(s) staged to:</b><br>"
-                        f"<font color=\"#6b7280\">{artifact_path}</font>"
-                        + (f"<br>{text_lines}" if text_lines else "")
-                    )
-                }
-            })
-
-            # Download buttons (one per file, up to 5)
-            if shown_btn:
-                artifact_widgets.append({
-                    "buttonList": {
-                        "buttons": [
-                            {
-                                "text":    f"⬇ {f['name']}",
-                                "onClick": {"openLink": {"url": f["download_url"]}},
-                                "color":   {"red": 0.09, "green": 0.64, "blue": 0.29, "alpha": 1.0},
-                            }
-                            for f in shown_btn
-                        ]
-                    }
-                })
-            if len(staged_files) > 5 and build_url:
-                artifact_widgets.append({
-                    "buttonList": {
-                        "buttons": [{
-                            "text":    f"View all {len(staged_files)} artifacts in Jenkins",
-                            "icon":    {"knownIcon": "OPEN_IN_NEW"},
-                            "onClick": {"openLink": {"url": build_url.rstrip("/") + "/artifact/"}},
-                        }]
-                    }
-                })
+                file_list += f"\n  … and {len(staged_files)-8} more"
+            art_content = (
+                f"<b>{len(staged_files)} file(s)</b> staged to:\n"
+                f"{artifact_path}\n{file_list}"
+            )
         else:
-            artifact_widgets.append({
-                "decoratedText": {
-                    "topLabel":  "Artifacts",
-                    "text":      f"<font color=\"#6b7280\">{artifact_path}</font>",
-                    "startIcon": {"knownIcon": "DESCRIPTION"},
-                }
-            })
+            art_content = artifact_path
 
         if not_found_files:
             missing = ", ".join(not_found_files[:5])
-            artifact_widgets.append({
-                "textParagraph": {
-                    "text": f"<font color=\"#d97706\">⚠️ Not found in build: {missing}</font>"
-                }
-            })
+            art_content += f"\n⚠️ Not found in build: {missing}"
 
-    # ════════════════════════════════════════════════════════════════════════════
-    #  SECTION 3 — Failure details
-    # ════════════════════════════════════════════════════════════════════════════
-    failure_widgets = []
-    if (is_failure or is_unstable) and (failure_cause or failure_suggestion):
-        if failure_cause:
-            failure_widgets.append({
-                "textParagraph": {
-                    "text": (
-                        f"<font color=\"#dc2626\"><b>❌ Root Cause</b></font><br>"
-                        f"{failure_cause}"
-                    )
-                }
-            })
-        if failure_suggestion:
-            failure_widgets.append({
-                "textParagraph": {
-                    "text": (
-                        f"<font color=\"#d97706\"><b>💡 Suggestion</b></font><br>"
-                        f"{failure_suggestion}"
-                    )
-                }
-            })
+        widgets.append({"keyValue": {
+            "topLabel":         "Artifacts",
+            "content":          art_content,
+            "contentMultiline": True,
+            "icon":             "DESCRIPTION",
+        }})
 
-    # ════════════════════════════════════════════════════════════════════════════
-    #  SECTION 4 — Action buttons
-    # ════════════════════════════════════════════════════════════════════════════
-    buttons = []
+    # Failure details
+    if (is_failure or is_unstable) and failure_cause:
+        widgets.append({"textParagraph": {
+            "text": f"<b>❌ Root Cause:</b> {failure_cause}"
+        }})
+    if (is_failure or is_unstable) and failure_suggestion:
+        widgets.append({"textParagraph": {
+            "text": f"<b>💡 Suggestion:</b> {failure_suggestion}"
+        }})
+
+    # Action buttons
+    buttons: list[dict] = []
     if build_url:
-        buttons.append({
+        buttons.append({"textButton": {
             "text":    "Open in Jenkins",
-            "icon":    {"knownIcon": "OPEN_IN_NEW"},
             "onClick": {"openLink": {"url": build_url}},
-            "color":   {"red": 0.31, "green": 0.63, "blue": 1.0, "alpha": 1.0},
-        })
+        }})
     if console_url and (is_failure or is_unstable):
-        buttons.append({
+        buttons.append({"textButton": {
             "text":    "View Console",
-            "icon":    {"knownIcon": "DESCRIPTION"},
             "onClick": {"openLink": {"url": console_url}},
-            "color":   {"red": 0.86, "green": 0.15, "blue": 0.15, "alpha": 1.0},
-        })
-
-    # ── Assemble sections ─────────────────────────────────────────────────────
-    sections = [
-        {
-            "header":     "Build Details",
-            "collapsible": False,
-            "widgets":    summary_widgets,
-        }
-    ]
-
-    if artifact_widgets:
-        sections.append({
-            "header":     "Artifacts",
-            "collapsible": len(staged_files) > 3,
-            "widgets":    artifact_widgets,
-        })
-
-    if failure_widgets:
-        sections.append({
-            "header":     "Failure Analysis",
-            "collapsible": False,
-            "widgets":    failure_widgets,
-        })
-
+        }})
     if buttons:
-        sections.append({
-            "collapsible": False,
-            "widgets": [{"buttonList": {"buttons": buttons}}],
-        })
+        widgets.append({"buttons": buttons})
 
-    # ── Final card payload ───────────────────────────────────────────────────
-    card = {
-        "cardsV2": [
+    # ── Assemble v1 card payload ──────────────────────────────────────────────────
+    payload = {
+        "cards": [
             {
-                "cardId": f"build-{job_name}-{build_number}",
-                "card": {
-                    "header": {
-                        "title":        f"{status_icon}  {status_label}",
-                        "subtitle":     f"{job_name}  •  Build #{build_number}  •  {duration_str}",
-                        "imageUrl":     "https://www.jenkins.io/images/logos/jenkins/jenkins.svg",
-                        "imageType":    "CIRCLE",
-                        "imageAltText": "Jenkins",
-                    },
-                    "sections": sections,
+                "header": {
+                    "title":     f"{status_icon}  {status_label}",
+                    "subtitle":  f"{job_name}  •  Build #{build_number}  •  {duration_str or '—'}",
+                    "imageUrl":  "https://www.jenkins.io/images/logos/jenkins/jenkins.svg",
+                    "imageStyle": "IMAGE",
                 },
+                "sections": [
+                    {"widgets": widgets}
+                ],
             }
         ]
     }
 
-    _post_gchat(card)
+    return _post_gchat(payload)
 
 
-def send_gchat(message: str) -> None:
-    """Post a plain-text message to Google Chat (fallback / simple alerts)."""
+def send_gchat(message: str) -> bool:
+    """Post a plain-text message to Google Chat (simple alerts / tests)."""
     webhook_url = os.getenv("GCHAT_WEBHOOK", "").strip()
     if not webhook_url:
         logger.warning("GCHAT_WEBHOOK not set — skipping Google Chat notification.")
-        return
-    _post_gchat({"text": message})
+        return False
+    return _post_gchat({"text": message})
 
 
-def _post_gchat(payload: dict) -> None:
-    """Shared HTTP POST helper for Google Chat webhook."""
+def _post_gchat(payload: dict) -> bool:
+    """
+    POST payload to the configured Google Chat webhook.
+    Returns True on HTTP 200, False on any error.
+    Logs the HTTP status code and response body on failure so you can debug.
+    """
     webhook_url = os.getenv("GCHAT_WEBHOOK", "").strip()
     if not webhook_url:
-        return
+        return False
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)
-        resp.raise_for_status()
-        logger.info("GChat notification sent (HTTP %d).", resp.status_code)
+        if not resp.ok:
+            # Log the full response so operators can see exactly what Google rejected
+            logger.warning(
+                "GChat notification rejected — HTTP %d: %s",
+                resp.status_code,
+                resp.text[:400],
+            )
+            return False
+        logger.info("GChat notification sent successfully (HTTP %d).", resp.status_code)
+        return True
     except requests.exceptions.Timeout:
-        logger.warning("GChat notification timed out.")
+        logger.warning("GChat notification timed out after 10s.")
+        return False
+    except requests.exceptions.ConnectionError as exc:
+        logger.warning("GChat notification connection error: %s", exc)
+        return False
     except requests.exceptions.RequestException as exc:
         logger.warning("GChat notification failed: %s", exc)
+        return False
 
 
-# ─── Email via MailHog ────────────────────────────────────────────────────────────
+# ─── Email (MailHog / SMTP) ───────────────────────────────────────────────────────
 
-def send_email(subject: str, body: str) -> None:
-    """Send a notification email through MailHog (localhost:1025)."""
-    smtp_host    = os.getenv("SMTP_HOST",        "localhost")
-    smtp_port    = int(os.getenv("SMTP_PORT",     "1025"))
-    from_addr    = os.getenv("NOTIFY_EMAIL_FROM", "buildbot@local")
-    to_addr_raw  = os.getenv("NOTIFY_EMAIL_TO",   "dev@local")
+def send_email(subject: str, body: str) -> bool:
+    """
+    Send a notification email via SMTP.
+    Defaults to MailHog on localhost:1025.  Returns True on success.
+
+    Common failures:
+      ConnectionRefusedError → MailHog / SMTP not running on the configured port.
+      SMTPException          → auth or relay error on a real SMTP server.
+    """
+    smtp_host   = os.getenv("SMTP_HOST",        "localhost")
+    smtp_port   = int(os.getenv("SMTP_PORT",    "1025"))
+    from_addr   = os.getenv("NOTIFY_EMAIL_FROM","buildbot@local")
+    to_addr_raw = os.getenv("NOTIFY_EMAIL_TO",  "dev@local")
 
     to_addrs = [a.strip() for a in to_addr_raw.split(",") if a.strip()]
     if not to_addrs:
-        logger.warning("NOTIFY_EMAIL_TO is empty — skipping email.")
-        return
+        logger.warning("NOTIFY_EMAIL_TO is empty — skipping email notification.")
+        return False
 
-    msg = MIMEMultipart("alternative")
+    msg            = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = from_addr
     msg["To"]      = ", ".join(to_addrs)
@@ -350,30 +264,51 @@ def send_email(subject: str, body: str) -> None:
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
             server.sendmail(from_addr, to_addrs, msg.as_string())
-        logger.info("Email sent to %s  subject=%r", to_addrs, subject)
+        logger.info("Email notification sent to %s  subject=%r", to_addrs, subject)
+        return True
     except ConnectionRefusedError:
-        logger.warning("Email failed — is MailHog running on %s:%d?", smtp_host, smtp_port)
+        logger.warning(
+            "Email notification failed — nothing is listening on %s:%d. "
+            "Is MailHog running? Start it with: mailhog  (or: go run github.com/mailhog/MailHog)",
+            smtp_host, smtp_port,
+        )
+        return False
     except (smtplib.SMTPException, OSError) as exc:
-        logger.warning("Email error: %s", exc)
+        logger.warning("Email notification error (%s:%d): %s", smtp_host, smtp_port, exc)
+        return False
 
 
 # ─── HTML email formatter ─────────────────────────────────────────────────────────
 
 def _plain_to_html(plain: str) -> str:
+    """Convert a plain-text notification body to a simple styled HTML email."""
     import re as _re
-    _label_re = _re.compile(r"^([\w\s#]+):\s")
+    _label_re = _re.compile(r"^([\w #]+):\s")
     lines = []
     for line in plain.splitlines():
-        esc = line.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-        if _label_re.match(esc):
-            key, _, rest = esc.partition(":")
-            esc = f"<b>{key}:</b>{rest}"
-        lines.append(esc)
+        esc = (
+            line
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        m = _label_re.match(esc)
+        if m:
+            key = m.group(1)
+            rest = esc[m.end():]
+            esc = f"<b>{key}:</b> {rest}"
+        lines.append(esc or "&nbsp;")
+
+    body_html = "<br>\n".join(lines)
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
-body{{font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;background:#fff;padding:20px}}
-.box{{background:#f5f5f5;border-left:4px solid #4f46e5;padding:12px 16px;border-radius:4px}}
+body  {{ font-family: Segoe UI, Arial, sans-serif; font-size: 14px;
+         color: #222; background: #f9f9f9; padding: 24px; }}
+.box  {{ background: #fff; border-left: 4px solid #4f46e5;
+         padding: 16px 20px; border-radius: 6px;
+         box-shadow: 0 1px 4px rgba(0,0,0,.08); }}
+.foot {{ margin-top: 16px; font-size: 11px; color: #999; }}
 </style></head><body>
-<div class="box">{"<br>".join(lines)}</div>
-<p style="margin-top:16px;font-size:12px;color:#888;">Sent by BuildBot · Exterro DevOps AI</p>
+<div class="box">{body_html}</div>
+<p class="foot">Sent by BuildBot · Exterro DevOps AI</p>
 </body></html>"""

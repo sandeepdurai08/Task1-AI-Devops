@@ -11,5 +11,8 @@ flask-session==0.8.0      # server-side sessions (keeps credentials off client c
 requests==2.32.3
 python-dotenv==1.0.1
 
+# XML security (XXE prevention)
+defusedxml==0.7.1
+
 # LLM client
 openai==1.52.0

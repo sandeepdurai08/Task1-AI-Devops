@@ -804,7 +804,7 @@
     sortWrap.appendChild(sortLabel);
     const sortSel = document.createElement("select");
     sortSel.setAttribute("aria-label", "Sort jobs");
-    [["name","Name"],["status","Status"],["failed","Recently Failed"],["duration","Duration"]]
+    [["name","Name"],["status","Status"],["failed","Recently Failed"],["duration","Duration"],["folder","Folder"]]
       .forEach(([val, label]) => {
         const opt = document.createElement("option");
         opt.value = val; opt.textContent = label;
@@ -817,6 +817,23 @@
     sortWrap.appendChild(sortSel);
     header.appendChild(sortWrap);
     browser.appendChild(header);
+
+    // ── Index status note ────────────────────────────────────────────────────
+    const idxSt = browserData.index_status;
+    if (idxSt) {
+      const idxNote = document.createElement("div");
+      idxNote.className = "job-browser-index-note";
+      if (idxSt.building) {
+        idxNote.textContent = "⟳ Search index rebuilding…";
+        idxNote.title = "The background indexer is scanning all Jenkins jobs.";
+      } else if (idxSt.job_count > 0) {
+        const ageMins = idxSt.age_s ? Math.round(idxSt.age_s / 60) : 0;
+        const ttlMins = Math.round((idxSt.ttl_s || 600) / 60);
+        idxNote.textContent = `🗂 ${idxSt.job_count} jobs indexed`;
+        idxNote.title = `Index built ${ageMins}m ago · refreshes every ${ttlMins}m · type "search index status" for details`;
+      }
+      if (idxNote.textContent) browser.appendChild(idxNote);
+    }
 
     // ── Active filter chips ──────────────────────────────────────────────────
     const af = browserData.active_filters || {};
@@ -832,11 +849,20 @@
         });
         chips.appendChild(chip);
       };
-      if (af.status) addChip(`Status: ${af.status}`, "status");
-      if (af.hotfix) addChip("Hotfix only", "hotfix");
-      if (af.q)      addChip(`Search: "${af.q}"`, "search");
-      if (af.repo)   addChip(`Repo: ${af.repo}`, "repo");
-      if (af.branch) addChip(`Branch: ${af.branch}`, "branch");
+      if (af.status)       addChip(`Status: ${af.status}`,         "status");
+      if (af.hotfix)       addChip("Hotfix only",                    "hotfix");
+      if (af.q)            addChip(`Search: "${af.q}"`,              "search");
+      if (af.repo)         addChip(`Repo: ${af.repo}`,               "repo");
+      if (af.branch)       addChip(`Branch: ${af.branch}`,           "branch");
+      if (af.folder)       addChip(`Folder: ${af.folder}`,           "folder");
+      if (af.job_type)     addChip(`Type: ${af.job_type}`,           "job type");
+      if (af.env_type)     addChip(`ENV_TYPE: ${af.env_type}`,       "env type");
+      if (af.aws_region)   addChip(`Region: ${af.aws_region}`,       "aws region");
+      if (af.cluster_name) addChip(`Cluster: ${af.cluster_name}`,    "cluster");
+      if (af.param_name)   addChip(
+        `Param: ${escapeHtml(af.param_name)}${af.param_value ? "=" + escapeHtml(af.param_value) : ""}`,
+        "param"
+      );
 
       const clearBtn = document.createElement("span");
       clearBtn.className = "job-browser-chip-clear";
@@ -883,10 +909,21 @@
             : `${Math.floor(durMs/1000)}s`)
           : "—";
 
+        // Folder path prefix — shown dimmed when the job lives inside a folder
+        const folderHtml = job.folder
+          ? `<span class="job-card-folder">${escapeHtml(job.folder)} /</span> `
+          : "";
+
+        // Job-type badge — pipeline, freestyle, multibranch
+        const jt = (job.job_type || "").toLowerCase();
+        const jtBadge = (jt && jt !== "unknown")
+          ? `<span class="job-type-badge job-type-${escapeHtml(jt)}">${escapeHtml(jt)}</span>`
+          : "";
+
         card.innerHTML = `
           <div class="job-card-main">
-            <span class="job-card-name">${escapeHtml(job.name)}</span>
-            <span class="job-card-status ${statusClass}">${escapeHtml(job.status || "unknown")}</span>
+            <span class="job-card-name">${folderHtml}${escapeHtml(job.name)}</span>
+            <div class="job-card-badges">${jtBadge}<span class="job-card-status ${statusClass}">${escapeHtml(job.status || "unknown")}</span></div>
           </div>
           ${job.description ? `<p class="job-card-desc">${escapeHtml(job.description)}</p>` : ""}
           <div class="job-card-meta">
@@ -957,7 +994,7 @@
     // ── Hint ─────────────────────────────────────────────────────────────────
     const hint = document.createElement("div");
     hint.className = "job-browser-hint";
-    hint.textContent = 'Type: "next page", "failed only", "hotfix", "sort by failed", "clear filters"…';
+    hint.textContent = 'Type: "next page", "failed only", "hotfix", "pipeline jobs", "jobs in folder X", "sort by failed", "clear filters"…';
     browser.appendChild(hint);
 
     bubble.appendChild(browser);

@@ -253,6 +253,10 @@ Return ONLY a JSON object:
 {"job_name": "<exact name or null>", "confidence": "high" or "low", "reason": "<one sentence>"}
 
 Rules: job_name must be from the list or null. high = one job clearly fits. No prose, raw JSON.
+
+**v15 update:** NEVER keyword-match message words to job names (e.g. "check..." ≠ "check job").
+If the user is asking a question about jobs rather than requesting a build, return null/low.
+Base selection only on job description and build purpose.
 ```
 
 ### Settings

@@ -1302,3 +1302,63 @@ def filter_and_page_jobs(
         "active_filters":  active_filters,
         "repo_matched_by": repo_matched_by,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RECURSIVE JOB DISCOVERY  (wraps the search index)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def list_all_jobs_recursive() -> list[dict]:
+    """
+    Return every Jenkins job visible to the configured user, including jobs
+    nested inside folders and sub-folders.
+
+    Each entry has the same shape as list_jobs() **plus**:
+        "full_name":  "Team-A/Infra/deploy-prod"  # full folder-prefixed path
+        "folder":     "Team-A/Infra"               # parent folder (empty = root)
+        "job_type":   "freestyle" | "pipeline" | "multibranch" | "unknown"
+
+    Uses the JobSearchIndex snapshot when the index is ready (recommended path).
+    Falls back to a direct Jenkins API call for top-level jobs only when the
+    index has not yet completed its first build.
+    """
+    from services.jenkins_search import get_index as _get_idx
+
+    idx = _get_idx()
+    if idx._ready.is_set():
+        raw = idx.snapshot()
+        return [
+            {
+                "name":        e["name"],
+                "full_name":   e.get("full_name", e["name"]),
+                "folder":      e.get("folder", ""),
+                "description": e.get("description", ""),
+                "status":      e.get("status", ""),
+                "url":         e.get("url", ""),
+                "last_build":  e.get("last_build"),
+                "job_type":    e.get("job_type", "unknown"),
+                "is_hotfix":   e.get("is_hotfix", False),
+                "building":    e.get("building", False),
+            }
+            for e in raw
+        ]
+
+    # Index not ready yet — fall back to flat top-level list
+    logger.debug("list_all_jobs_recursive(): index not ready, using flat list_jobs()")
+    return [
+        dict(j, full_name=j["name"], folder="", job_type="unknown", is_hotfix=False)
+        for j in list_jobs()
+    ]
+
+
+def get_job_config_xml(full_name: str) -> Optional[str]:
+    """
+    Fetch raw config.xml for a job identified by its full folder-path
+    (e.g. "Team-A/hotfix-build").
+
+    Returns the XML string, or None if the job is not found or not accessible.
+    This is a thin public wrapper around jenkins_search._fetch_config_xml()
+    so callers outside the search module can fetch individual job configs.
+    """
+    from services.jenkins_search import _fetch_config_xml
+    return _fetch_config_xml(full_name, _auth())

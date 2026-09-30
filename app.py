@@ -12,6 +12,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import threading
 import time
 import uuid
@@ -54,6 +55,18 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _sl(value, maxlen: int = 200) -> str:
+    """
+    Sanitize a user-supplied value for safe logging (CWE-117 / CWE-93).
+
+    Replaces newlines, carriage returns, and tabs with underscores so an
+    attacker cannot inject fake log entries by embedding control characters
+    in a username, job name, IP address, or error message.
+    Also truncates to `maxlen` characters to prevent log flooding.
+    """
+    return re.sub(r"[\r\n\t]", "_", str(value))[:maxlen]
 
 # ─── Flask app ────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -116,23 +129,31 @@ def _err_auth(e):
 # Flask-Session filesystem backend was causing session loss on API requests.
 # The cookies are HMAC-signed with FLASK_SECRET_KEY — safe for our internal tool.
 app.permanent_session_lifetime = 28800   # 8 hours absolute
-app.config["SESSION_COOKIE_HTTPONLY"]  = True
-app.config["SESSION_COOKIE_SAMESITE"]  = "Lax"
-app.config["SESSION_COOKIE_SECURE"]    = os.getenv("COOKIE_SECURE", "0") == "1"
-logger.info("Using Flask built-in cookie sessions")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+_cookie_secure = os.getenv("COOKIE_SECURE", "0") == "1"
+app.config["SESSION_COOKIE_SECURE"]   = _cookie_secure
+if not _cookie_secure:
+    logger.warning(
+        "SESSION_COOKIE_SECURE is OFF (COOKIE_SECURE != '1'). "
+        "Set COOKIE_SECURE=1 in .env when running over HTTPS to prevent "
+        "the session cookie being sent over plain HTTP (CWE-614)."
+    )
+logger.info("Using Flask built-in cookie sessions (secure=%s, samesite=Strict)", _cookie_secure)
 
 # ─── CSRF protection (Flask-WTF) — optional ──────────────────────────────────────
 try:
     from flask_wtf.csrf import CSRFProtect as _CSRFProtect, generate_csrf as _generate_csrf
-    # Disable CSRF globally for JSON API routes — all protected by auth + same-origin
-    # Only the login form (POST /login) needs form-based CSRF
-    app.config['WTF_CSRF_CHECK_DEFAULT'] = False   # turn off blanket CSRF
+    # CSRF is ON by default for all routes.
+    # JSON API routes are explicitly exempted below after the routes are defined.
+    app.config['WTF_CSRF_CHECK_DEFAULT'] = True
     csrf = _CSRFProtect(app)
     _CSRF_AVAILABLE = True
-    logger.info("Flask-WTF CSRF initialized (form-only mode)")
+    logger.info("Flask-WTF CSRF initialized")
 except ImportError:
     _CSRF_AVAILABLE = False
     _generate_csrf = lambda: ""   # noqa: E731
+    csrf = None
     logger.warning("flask-wtf not installed — CSRF protection disabled")
 
 # ─── Rate limiting (Flask-Limiter) — optional ────────────────────────────────────
@@ -193,11 +214,11 @@ def _security_headers(response):
         try:
             response.set_cookie(
                 "csrf_token", _generate_csrf(),
-                samesite="Lax", httponly=False,
-                secure=os.getenv("COOKIE_SECURE", "0") == "1",
+                samesite="Lax", httponly=False,   # must be JS-readable for X-CSRFToken header
+                secure=_cookie_secure,
             )
-        except Exception:
-            pass
+        except RuntimeError as _csrf_err:
+            logger.debug("CSRF cookie skipped outside request context: %s", _csrf_err)
     return response
 
 # Import auth module — keeps all auth logic in one place
@@ -367,7 +388,7 @@ def _bootstrap_admin() -> None:
         }
         save_users(db)
         logger.info("Bootstrap admin '%s' created from env vars.", username)
-        audit_logger.info("BOOTSTRAP_ADMIN_CREATED  user=%s", username)
+        audit_logger.info("BOOTSTRAP_ADMIN_CREATED  user=%s", _sl(username))
 
     except Exception as exc:
         logger.warning("Bootstrap admin creation failed: %s", exc)
@@ -375,8 +396,18 @@ def _bootstrap_admin() -> None:
 
 _bootstrap_admin()
 
-
-# ─── Session helper ───────────────────────────────────────────────────────────────
+# ─── Search index — background job-configuration indexer ─────────────────────────
+# Discovers all Jenkins jobs recursively (including nested folders), fetches
+# config.xml for each job, and builds a full-text + structured search index.
+# Refreshes every SEARCH_INDEX_TTL seconds (default 600 = 10 min, set in .env).
+# Runs as a daemon thread — if Jenkins is unreachable at startup the indexer
+# silently skips and retries on the next scheduled cycle.
+try:
+    from services.jenkins_search import get_index as _get_search_index
+    _get_search_index().start()
+    logger.info("JobSearchIndex background indexer started.")
+except Exception as _idx_exc:
+    logger.warning("Could not start search indexer (non-fatal): %s", _idx_exc)
 
 def _get_sid() -> str:
     if "sid" not in session:
@@ -579,70 +610,130 @@ def _browser_filters_from_session(sid: str) -> dict:
     conv = _conv_sessions.get(sid, {})
     return dict(conv.get("job_browser_filters", {
         "q": "", "status": "", "hotfix": False,
-        "repo": "", "branch": "", "repo_param_key": "",
-        "page": 1, "per_page": 20, "sort": "name",
+        "repo": "", "branch": "",
+        "folder": "", "job_type": "",
+        "env_type": "", "aws_region": "", "cluster_name": "",
+        "param_name": "", "param_value": "",
+        "page": 1, "per_page": 6, "sort": "name",
     }))
 
 
-def _build_job_browser_response(sid: str, filters: dict, jobs_all: list[dict]) -> dict:
-    """Run filter_and_page_jobs and build the chat response with a job_browser card."""
+# Default empty-filter state (used by clear-filters action)
+_EMPTY_BROWSER_FILTERS: dict = {
+    "q": "", "status": "", "hotfix": False,
+    "repo": "", "branch": "",
+    "folder": "", "job_type": "",
+    "env_type": "", "aws_region": "", "cluster_name": "",
+    "param_name": "", "param_value": "",
+    "page": 1, "per_page": 6, "sort": "name",
+}
+
+
+def _build_job_browser_response(sid: str, filters: dict,
+                                 jobs_all: list[dict] | None = None) -> dict:
+    """
+    Build the chat response with a job_browser card.
+
+    Uses the JobSearchIndex when the index is ready (supports deep filters:
+    repo URL, pipeline script text, config.xml metadata, env vars, etc.).
+    Falls back to the in-memory filter_and_page_jobs() when the index is
+    still building at startup, keeping the UI responsive immediately.
+    """
+    from services.jenkins_search import get_index as _get_idx
     from services import jenkins_client
 
-    result = jenkins_client.filter_and_page_jobs(
-        jobs_all,
-        q              = filters.get("q", ""),
-        status         = filters.get("status", ""),
-        hotfix         = bool(filters.get("hotfix", False)),
-        repo           = filters.get("repo", ""),
-        branch         = filters.get("branch", ""),
-        repo_param_key = filters.get("repo_param_key", ""),
-        page           = int(filters.get("page", 1)),
-        per_page       = int(filters.get("per_page", 20)),
-        sort           = filters.get("sort", "name"),
-    )
+    idx    = _get_idx()
+    per_pg = int(filters.get("per_page", 6))
+
+    if idx._ready.is_set():
+        result = idx.search(
+            q            = filters.get("q", ""),
+            repo         = filters.get("repo", ""),
+            branch       = filters.get("branch", ""),
+            status       = filters.get("status", ""),
+            hotfix       = bool(filters.get("hotfix", False)),
+            folder       = filters.get("folder", ""),
+            job_type     = filters.get("job_type", ""),
+            param_name   = filters.get("param_name", ""),
+            param_value  = filters.get("param_value", ""),
+            env_type     = filters.get("env_type", ""),
+            aws_region   = filters.get("aws_region", ""),
+            cluster_name = filters.get("cluster_name", ""),
+            page         = int(filters.get("page", 1)),
+            per_page     = per_pg,
+            sort         = filters.get("sort", "name"),
+        )
+    else:
+        # Index not ready yet — fall back to flat list + legacy filter
+        if jobs_all is None:
+            try:
+                jobs_all = jenkins_client.list_jobs()
+            except Exception:
+                jobs_all = []
+        result = jenkins_client.filter_and_page_jobs(
+            jobs_all,
+            q              = filters.get("q", ""),
+            status         = filters.get("status", ""),
+            hotfix         = bool(filters.get("hotfix", False)),
+            repo           = filters.get("repo", ""),
+            branch         = filters.get("branch", ""),
+            repo_param_key = "",
+            page           = int(filters.get("page", 1)),
+            per_page       = per_pg,
+            sort           = filters.get("sort", "name"),
+        )
 
     conv = _conv_sessions.setdefault(sid, {})
     conv["job_browser_filters"] = filters
     conv["job_browser_active"]  = True
     _save_conv_sessions()
 
-    total      = result["total"]
-    page       = result["page"]
-    per_page   = result["per_page"]
-    start      = (page - 1) * per_page + 1
-    end        = min(start + per_page - 1, total)
-    act_f      = result["active_filters"]
+    total    = result["total"]
+    page     = result["page"]
+    per_page = result["per_page"]
+    start    = (page - 1) * per_page + 1
+    end      = min(start + per_page - 1, total)
+    act_f    = result["active_filters"]
 
-    filter_strs = []
-    if act_f.get("status"):   filter_strs.append(f"status: **{act_f['status']}**")
-    if act_f.get("hotfix"):   filter_strs.append("**hotfix only**")
-    if act_f.get("q"):        filter_strs.append(f"search: **{act_f['q']}**")
-    if act_f.get("repo"):     filter_strs.append(f"repo: **{act_f['repo']}**")
-    if act_f.get("branch"):   filter_strs.append(f"branch: **{act_f['branch']}**")
+    filter_strs: list[str] = []
+    if act_f.get("status"):       filter_strs.append(f"status: **{act_f['status']}**")
+    if act_f.get("hotfix"):       filter_strs.append("**hotfix only**")
+    if act_f.get("q"):            filter_strs.append(f"search: **{act_f['q']}**")
+    if act_f.get("repo"):         filter_strs.append(f"repo: **{act_f['repo']}**")
+    if act_f.get("branch"):       filter_strs.append(f"branch: **{act_f['branch']}**")
+    if act_f.get("folder"):       filter_strs.append(f"folder: **{act_f['folder']}**")
+    if act_f.get("job_type"):     filter_strs.append(f"type: **{act_f['job_type']}**")
+    if act_f.get("env_type"):     filter_strs.append(f"ENV_TYPE: **{act_f['env_type']}**")
+    if act_f.get("aws_region"):   filter_strs.append(f"AWS_REGION: **{act_f['aws_region']}**")
+    if act_f.get("cluster_name"): filter_strs.append(f"CLUSTER: **{act_f['cluster_name']}**")
+    if act_f.get("param_name"):
+        pv = f"={act_f['param_value']}" if act_f.get("param_value") else ""
+        filter_strs.append(f"param: **{act_f['param_name']}{pv}**")
 
     if total == 0:
         active_str = ", ".join(filter_strs) if filter_strs else "none"
-        if act_f.get("repo") and result.get("repo_matched_by") is None:
-            reply = (
-                f"No jobs matched repo **`{act_f['repo']}`** in job names or parameter defaults.\n"
-                "Which parameter holds the repo URL in your jobs? "
-                "(e.g. `GITHUB_URL`, `GIT_URL`, `REPO_URL`)"
-            )
-        else:
-            reply = (
-                f"No jobs found — active filters: {active_str}.\n"
-                "Type `clear filters` to reset, or try a different search."
-            )
+        reply = (
+            f"No jobs found — active filters: {active_str}.\n"
+            "Type `clear filters` to reset, or try a different search."
+        )
     else:
-        count_str  = f"Showing **{start}–{end}** of **{total}** jobs"
+        idx_st   = result.get("index_status") or {}
+        idx_note = (
+            f"  *(index: {idx_st['job_count']} jobs)*"
+            if idx_st.get("job_count") else ""
+        )
+        count_str  = f"Showing **{start}–{end}** of **{total}** jobs{idx_note}"
         filter_str = f"  ·  {', '.join(filter_strs)}" if filter_strs else ""
-        hint       = "\nType: `next page`, `failed only`, `hotfix`, `sort by failed`, `clear filters`…"
-        reply      = f"{count_str}{filter_str}.{hint}"
+        hint       = (
+            "\nType: `next page`, `failed only`, `hotfix`, `pipeline jobs`, "
+            "`jobs in folder X`, `sort by failed`, `clear filters`…"
+        )
+        reply = f"{count_str}{filter_str}.{hint}"
 
     return {
-        "reply":       reply,
-        "param_card":  None,
-        "job_card":    None,
+        "reply":      reply,
+        "param_card": None,
+        "job_card":   None,
         "job_browser": {
             "jobs":           result["jobs"],
             "total":          total,
@@ -651,6 +742,7 @@ def _build_job_browser_response(sid: str, filters: dict, jobs_all: list[dict]) -
             "total_pages":    result["total_pages"],
             "active_filters": act_f,
             "sort":           filters.get("sort", "name"),
+            "index_status":   result.get("index_status"),
         },
     }
 
@@ -731,7 +823,10 @@ def _handle_query(sid: str, user_message: str, context: list | None = None) -> d
     search_query   = parsed["search_query"]
 
     logger.info("Query action=%r job=%r build=%s view=%r count=%d",
-                action, job_name, build_number, view_name, count)
+                action, re.sub(r'[\r\n\t]', '_', str(job_name)),
+                build_number,
+                re.sub(r'[\r\n\t]', '_', str(view_name)),
+                count)
 
     # ════════════════════════════════════════════════════════════════════════════
     #  ACTION DISPATCH
@@ -746,7 +841,55 @@ def _handle_query(sid: str, user_message: str, context: list | None = None) -> d
         if parsed.get("status"):
             filters["status"] = parsed["status"]
         filters["page"] = 1
-        return _build_job_browser_response(sid, filters, jobs)
+        return _build_job_browser_response(sid, filters)
+
+    # ── deep_search → extract rich structured filters then run index search ──────
+    if action == "deep_search":
+        from services.llm_client import parse_search_query
+        sf      = parse_search_query(user_message, context=context)
+        filters = _browser_filters_from_session(sid)
+        # Merge extracted filter fields (only overwrite when LLM found something)
+        _SF_KEYS = ("q", "repo", "branch", "status", "folder", "job_type",
+                    "param_name", "param_value", "env_type", "aws_region", "cluster_name", "sort")
+        for k in _SF_KEYS:
+            if sf.get(k):
+                filters[k] = sf[k]
+        if sf.get("hotfix"):
+            filters["hotfix"] = True
+        filters["page"] = 1
+        logger.info("deep_search filters: %s (source=%s)",
+                    re.sub(r'[\r\n\t]', '_', str(sf)[:200]),
+                    re.sub(r'[\r\n\t]', '_', str(sf.get("_source", ""))))
+        return _build_job_browser_response(sid, filters)
+
+    # ── index_status → show search-index health and stats ────────────────────────
+    if action == "index_status":
+        import datetime as _dt
+        from services.jenkins_search import get_index as _get_idx
+        idx = _get_idx()
+        st  = idx.status()
+        if st["building"]:
+            return _err("🔄 Search index is currently being built — please wait a moment.")
+        if st.get("built_at"):
+            age       = st.get("age_s") or 0
+            age_str   = f"{age // 60}m {age % 60}s" if age >= 60 else f"{age}s"
+            nxt       = max(0, (st.get("ttl_s") or 600) - age)
+            nxt_str   = f"{nxt // 60}m {nxt % 60}s" if nxt >= 60 else f"{nxt}s"
+            err_note  = (
+                f"\n• Errors: `{', '.join(st['errors'][:3])}`"
+                if st.get("errors") else ""
+            )
+            return _err(
+                f"📋 **Search index status:**\n"
+                f"• **{st['job_count']}** jobs indexed\n"
+                f"• Last built **{age_str}** ago\n"
+                f"• Next refresh in **{nxt_str}** (TTL: {st.get('ttl_s', 600)}s)"
+                f"{err_note}"
+            )
+        return _err(
+            "⏳ Search index has not been built yet — it starts automatically at startup.\n"
+            "Check that Jenkins is reachable and try again in a moment."
+        )
 
     # ── list_views ───────────────────────────────────────────────────────────────
     if action == "list_views":
@@ -1201,12 +1344,12 @@ def _handle_message(sid: str, user_message: str, context: list | None = None) ->
         if act == "select" and update.get("select_job"):
             conv["job_browser_active"] = False
             audit_logger.info("JOB_BROWSER_SELECT  user=%s  job=%s",
-                              current_user()["username"] if current_user() else "unknown",
-                              update["select_job"])
+                              _sl(current_user()["username"] if current_user() else "unknown"),
+                              _sl(update["select_job"]))
             return _schema_to_param_card(sid, update["select_job"], user_message)
 
         if act == "clear":
-            filters = {"q":"","status":"","hotfix":False,"repo":"","branch":"","repo_param_key":"","page":1,"per_page":20,"sort":"name"}
+            filters = dict(_EMPTY_BROWSER_FILTERS)
         elif act == "next":
             filters["page"] = filters.get("page", 1) + 1
         elif act == "prev":
@@ -1217,19 +1360,22 @@ def _handle_message(sid: str, user_message: str, context: list | None = None) ->
             except (ValueError, IndexError):
                 pass
         else:
-            if update.get("status"):  filters["status"] = update["status"]
-            if update.get("hotfix"):  filters["hotfix"] = update["hotfix"]
-            if update.get("q"):       filters["q"]      = update["q"]
-            if update.get("repo"):    filters["repo"]   = update["repo"]
-            if update.get("branch"):  filters["branch"] = update["branch"]
-            if update.get("sort"):    filters["sort"]   = update["sort"]
+            if update.get("status"):       filters["status"]       = update["status"]
+            if update.get("hotfix"):       filters["hotfix"]       = update["hotfix"]
+            if update.get("q"):            filters["q"]            = update["q"]
+            if update.get("repo"):         filters["repo"]         = update["repo"]
+            if update.get("branch"):       filters["branch"]       = update["branch"]
+            if update.get("sort"):         filters["sort"]         = update["sort"]
+            if update.get("folder"):       filters["folder"]       = update["folder"]
+            if update.get("job_type"):     filters["job_type"]     = update["job_type"]
+            if update.get("env_type"):     filters["env_type"]     = update["env_type"]
+            if update.get("aws_region"):   filters["aws_region"]   = update["aws_region"]
+            if update.get("cluster_name"): filters["cluster_name"] = update["cluster_name"]
+            if update.get("param_name"):   filters["param_name"]   = update["param_name"]
+            if update.get("param_value"):  filters["param_value"]  = update["param_value"]
             filters["page"] = 1
 
-        try:
-            all_jobs = jenkins_client.list_jobs()
-        except (JenkinsDownError, JenkinsError) as exc:
-            return {"reply": f"⚠️ Could not list jobs: {exc}", "param_card": None, "job_card": None}
-        return _build_job_browser_response(sid, filters, all_jobs)
+        return _build_job_browser_response(sid, filters)
 
     if intent == "query":
         return _handle_query(sid, user_message, ctx)
@@ -1650,12 +1796,98 @@ def _copy_artifacts(
     }
 
 
+def _compose_artifact_summary(art_result: dict) -> str:
+    """Build the artifact summary string for the build completion message."""
+    dest = art_result["dest"]
+    if art_result["selective"] and art_result["staged"]:
+        file_lines = "\n".join(f"  • {f['name']}" for f in art_result["staged"])
+        summary = f"Staged {len(art_result['staged'])} file(s) to `{dest}`:\n{file_lines}"
+        if art_result["not_found"]:
+            missing_names = ", ".join(f"`{f}`" for f in art_result["not_found"])
+            summary += f"\n⚠️ Not found in build output: {missing_names}"
+        return summary
+    if art_result["staged"]:
+        return f"Artifacts: `{dest}` ({len(art_result['staged'])} file(s))"
+    return f"Artifacts folder: `{dest}`"
+
+
+def _send_notifications(
+    job_name: str,
+    build_number: int,
+    result: dict,
+    build_url: str,
+    art_result: dict,
+    failure_cause: str,
+    failure_suggestion: str,
+    triggered_by: str,
+    params: dict,
+) -> list[str]:
+    """
+    Send GChat and email notifications. Returns a list of status strings
+    to append to the build completion message.
+    """
+    from services import notifier
+
+    email_body = (
+        f"Job:       {job_name}\n"
+        f"Build #:   {build_number}\n"
+        f"Result:    {result['result']}\n"
+        f"Duration:  {result['duration_str']}\n"
+        f"URL:       {result['url']}\n"
+        f"Artifacts: {art_result['dest']}\n"
+    )
+    if result["result"] != "SUCCESS" and failure_cause:
+        email_body += f"\nFailure cause: {failure_cause}\nSuggestion: {failure_suggestion}\n"
+
+    gchat_ok = False
+    email_ok = False
+
+    try:
+        gchat_ok = notifier.send_gchat_build_result(
+            job_name           = job_name,
+            build_number       = build_number,
+            result             = result["result"],
+            duration_str       = result["duration_str"],
+            build_url          = build_url,
+            artifact_path      = str(art_result["dest"]),
+            staged_files       = art_result.get("staged", []),
+            not_found_files    = art_result.get("not_found", []),
+            failure_cause      = failure_cause,
+            failure_suggestion = failure_suggestion,
+            triggered_by       = triggered_by,
+            build_params       = params,
+        )
+    except Exception as exc:
+        logger.warning("GChat notification error (non-fatal): %s",
+                       re.sub(r'[\r\n\t]', '_', str(exc)))
+
+    try:
+        email_ok = notifier.send_email(
+            subject = f"BuildBot: Build #{build_number} {result['result']}",
+            body    = email_body,
+        )
+    except Exception as exc:
+        logger.warning("Email notification error (non-fatal): %s", exc)
+
+    notif_parts: list[str] = []
+    if gchat_ok:
+        notif_parts.append("📬 GChat notified")
+    elif os.getenv("GCHAT_WEBHOOK", "").strip():
+        notif_parts.append("⚠️ GChat failed — check app logs")
+    if email_ok:
+        notif_parts.append("📧 Email sent")
+    elif os.getenv("NOTIFY_EMAIL_TO", "").strip():
+        notif_parts.append("⚠️ Email failed — check app logs")
+    return notif_parts
+
+
 def _run_build(
     job_id: str,
     job_name: str,
     params: dict,
     requested_artifacts: list[str] | None = None,
-    user_jenkins_auth=None,   # requests.auth.HTTPBasicAuth | None
+    user_jenkins_auth=None,
+    triggered_by: str = "unknown",
 ) -> None:
     from services.jenkins_client import (
         JenkinsBuildTimeoutError, JenkinsDownError, JenkinsError,
@@ -1711,54 +1943,16 @@ def _run_build(
         failure_cause      = ""
         failure_suggestion = ""
         if not is_success and console_tail:
-            from services.llm_client import llm_analyze_build_failure
-            diag = llm_analyze_build_failure(console_tail, result["result"])
-            failure_cause      = diag.get("cause", "")
-            failure_suggestion = diag.get("suggestion", "")
-            logger.info("Failure diagnosis [%s]: %s", diag.get("source","?"), failure_cause)
+            failure_cause, failure_suggestion = _diagnose_failure(console_tail, result["result"])
 
         # ── Notifications ─────────────────────────────────────────────────────────
-        notif_text = (
-            f"BuildBot: Build #{build_number} {result['result']} "
-            f"({result['duration_str']}) — Job: {job_name} | {artifact_summary}"
+        notif_parts = _send_notifications(
+            job_name, build_number, result, build_url, art_result,
+            failure_cause, failure_suggestion, triggered_by, params,
         )
-        try:
-            from services import notifier
-            notifier.send_gchat_build_result(
-                job_name            = job_name,
-                build_number        = build_number,
-                result              = result["result"],
-                duration_str        = result["duration_str"],
-                build_url           = build_url,
-                artifact_path       = str(art_result["dest"]),
-                staged_files        = art_result.get("staged", []),
-                not_found_files     = art_result.get("not_found", []),
-                failure_cause       = failure_cause,
-                failure_suggestion  = failure_suggestion,
-                triggered_by        = current_user()["username"] if current_user() else "unknown",
-                build_params        = params,   # pass the actual build params (branch, repo, etc.)
-            )
-        except Exception as exc:
-            logger.warning("GChat notification failed (non-fatal): %s", exc)
 
-        try:
-            from services import notifier
-            email_body = (
-                f"Job:       {job_name}\n"
-                f"Build #:   {build_number}\n"
-                f"Result:    {result['result']}\n"
-                f"Duration:  {result['duration_str']}\n"
-                f"URL:       {result['url']}\n"
-                f"Artifacts: {dest}\n"
-            )
-            if not is_success and failure_cause:
-                email_body += f"\nFailure cause: {failure_cause}\nSuggestion: {failure_suggestion}\n"
-            notifier.send_email(
-                subject=f"BuildBot: Build #{build_number} {result['result']}",
-                body=email_body,
-            )
-        except Exception as exc:
-            logger.warning("Email notification failed (non-fatal): %s", exc)
+        if notif_parts:
+            final_msg += "  ·  " + "  ·  ".join(notif_parts)
 
         _update_job(
             job_id,
@@ -1799,7 +1993,8 @@ def index():
 def chat():
     # Debug: log session state on every chat request
     logger.info("POST /chat — session keys: %s, auth_user: %s",
-                list(session.keys()), session.get("auth_user"))
+                list(session.keys()),
+                re.sub(r'[\r\n\t]', '_', str(session.get("auth_user", ""))))
     sid      = _get_sid()
     user     = current_user()
     data     = request.get_json(force=True)
@@ -1892,15 +2087,20 @@ def chat():
             user_jenkins_auth = HTTPBasicAuth(username, credential)
             logger.info("Build will use personal Jenkins credentials for user %r", username)
         else:
-            logger.info("Build will use service account credentials (user %r has no Jenkins token in session)", username)
+            logger.info("Build will use service account credentials (user %r has no Jenkins token in session)",
+                        re.sub(r'[\r\n\t]', '_', username))
 
         threading.Thread(
             target=_run_build,
-            args=(job_id, job_name, params, requested_artifacts, user_jenkins_auth),
+            args=(job_id, job_name, params, requested_artifacts,
+                  user_jenkins_auth, username),
             daemon=True,
         ).start()
 
-        logger.info("Build triggered by user %r: job=%s job_id=%s", username, job_name, job_id)
+        logger.info("Build triggered by user %r: job=%s job_id=%s",
+                    re.sub(r'[\r\n\t]', '_', username),
+                    re.sub(r'[\r\n\t]', '_', job_name),
+                    job_id)
 
         return jsonify({
             "reply":        f"⏳ Triggering **`{job_name}`** — queuing now…",
@@ -1916,12 +2116,7 @@ def chat():
         filters  = _browser_filters_from_session(sess_key)
         filters["sort"] = sort_val
         filters["page"] = 1
-        try:
-            from services import jenkins_client as _jc
-            all_jobs = _jc.list_jobs()
-        except Exception as exc:
-            return jsonify({"reply": f"⚠️ {exc}", "param_card": None, "job_card": None})
-        return jsonify(_build_job_browser_response(sess_key, filters, all_jobs))
+        return jsonify(_build_job_browser_response(sess_key, filters))
 
     # ── Job browser page ──────────────────────────────────────────────────────
     if msg_type == "job_browser_page":
@@ -1931,12 +2126,7 @@ def chat():
             page_num = 1
         filters  = _browser_filters_from_session(sess_key)
         filters["page"] = page_num
-        try:
-            from services import jenkins_client as _jc
-            all_jobs = _jc.list_jobs()
-        except Exception as exc:
-            return jsonify({"reply": f"⚠️ {exc}", "param_card": None, "job_card": None})
-        return jsonify(_build_job_browser_response(sess_key, filters, all_jobs))
+        return jsonify(_build_job_browser_response(sess_key, filters))
 
     return jsonify({"reply": "Unknown message type.", "param_card": None, "job_card": None})
 
@@ -1955,7 +2145,7 @@ def build_status(job_id: str):
     user = current_user()
     if user and user.get("role") != "admin" and state.get("owner") and state.get("owner") != user["username"]:
         audit_logger.warning("UNAUTHORIZED_STATUS  user=%s  job_id=%s  owner=%s",
-                             user["username"], job_id, state.get("owner"))
+                             _sl(user["username"]), _sl(job_id), _sl(state.get("owner", "")))
         return jsonify({"status": "unknown", "message": "Not authorised.", "done": True}), 403
     return jsonify(state)
 
@@ -2028,8 +2218,8 @@ def service_status():
     try:
         from services import jenkins_client
         jenkins_ok = jenkins_client.check_jenkins_alive()
-    except Exception:
-        pass
+    except (OSError, Exception) as _je:
+        logger.debug("Jenkins liveness check failed: %s", _je)
 
     # LLM — lightweight liveness check, no tokens consumed.
     # Uses /v1/models (standard OpenAI-compatible endpoint) rather than the
@@ -2046,14 +2236,150 @@ def service_status():
             verify        = _verify_ssl,
         )
         llm_ok = r.status_code < 500
-    except Exception:
-        pass
+    except (OSError, Exception) as _le:
+        logger.debug("LLM liveness check failed: %s", _le)
 
     return jsonify({
         "jenkins": "ok" if jenkins_ok else "error",
         "llm":     "ok" if llm_ok     else "error",
         "ts":      _time.time(),
     })
+
+
+# ─── Notification test endpoint ───────────────────────────────────────────────────
+
+@app.route("/test-notify", methods=["GET", "POST"])
+@require_auth
+def test_notify():
+    """
+    Send a test notification through every configured channel and report results.
+
+    GET  → returns the current notification config (no messages sent).
+    POST → sends a test message to each enabled channel and returns a status dict.
+
+    Admin-only — returns 403 for non-admin users.
+
+    Response shape (POST):
+    {
+        "gchat": {
+            "enabled": true,
+            "ok":      true,
+            "detail":  "Sent to https://chat.google…"
+        },
+        "email": {
+            "enabled": true,
+            "ok":      false,
+            "detail":  "ConnectionRefusedError — is MailHog running on localhost:1025?"
+        }
+    }
+    """
+    user = current_user()
+    if not user or user.get("role") != "admin":
+        return jsonify({"error": "Admin access required."}), 403
+
+    gchat_webhook  = os.getenv("GCHAT_WEBHOOK",        "").strip()
+    smtp_host      = os.getenv("SMTP_HOST",            "localhost")
+    smtp_port      = int(os.getenv("SMTP_PORT",        "1025"))
+    email_to       = os.getenv("NOTIFY_EMAIL_TO",      "").strip()
+    email_from     = os.getenv("NOTIFY_EMAIL_FROM",    "buildbot@local")
+
+    # ── GET — return config without sending ──────────────────────────────────────
+    if request.method == "GET":
+        return jsonify({
+            "gchat": {
+                "enabled": bool(gchat_webhook),
+                "webhook": (gchat_webhook[:40] + "…") if len(gchat_webhook) > 40 else gchat_webhook,
+            },
+            "email": {
+                "enabled":   bool(email_to),
+                "smtp_host": smtp_host,
+                "smtp_port": smtp_port,
+                "from":      email_from,
+                "to":        email_to,
+            },
+        })
+
+    # ── POST — send test messages ────────────────────────────────────────────────
+    from services import notifier
+    import time as _t
+
+    username  = user.get("username", "admin")
+    timestamp = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    results: dict = {}
+
+    # Google Chat test
+    gchat_result: dict = {"enabled": bool(gchat_webhook)}
+    if gchat_webhook:
+        try:
+            ok = notifier.send_gchat_build_result(
+                job_name           = "test-job",
+                build_number       = 0,
+                result             = "SUCCESS",
+                duration_str       = "0s",
+                build_url          = "",
+                artifact_path      = "",
+                staged_files       = [],
+                not_found_files    = [],
+                failure_cause      = "",
+                failure_suggestion = "",
+                triggered_by       = username,
+                build_params       = {"BRANCH": "test/notification-check"},
+            )
+            gchat_result["ok"]     = ok
+            gchat_result["detail"] = (
+                f"Test card sent successfully at {timestamp}."
+                if ok else
+                "Delivery failed — HTTP error logged in the app console. "
+                "Check that GCHAT_WEBHOOK is a valid incoming-webhook URL."
+            )
+        except Exception as exc:
+            gchat_result["ok"]     = False
+            gchat_result["detail"] = str(exc)
+    else:
+        gchat_result["ok"]     = False
+        gchat_result["detail"] = "GCHAT_WEBHOOK is not set in .env."
+    results["gchat"] = gchat_result
+
+    # Email test
+    email_result: dict = {"enabled": bool(email_to)}
+    if email_to:
+        try:
+            ok = notifier.send_email(
+                subject = f"[BuildBot] Test notification — {timestamp}",
+                body    = (
+                    f"This is a test notification from BuildBot.\n\n"
+                    f"Sent by:   {username}\n"
+                    f"Time:      {timestamp}\n"
+                    f"SMTP:      {smtp_host}:{smtp_port}\n"
+                    f"From:      {email_from}\n"
+                    f"To:        {email_to}\n\n"
+                    f"If you received this, email notifications are working correctly."
+                ),
+            )
+            email_result["ok"]     = ok
+            email_result["detail"] = (
+                f"Email sent to {email_to} at {timestamp}."
+                if ok else
+                f"Delivery failed — is MailHog (or your SMTP server) "
+                f"running on {smtp_host}:{smtp_port}? "
+                f"Check the app console for the exact error."
+            )
+        except Exception as exc:
+            email_result["ok"]     = False
+            email_result["detail"] = str(exc)
+    else:
+        email_result["ok"]     = False
+        email_result["detail"] = "NOTIFY_EMAIL_TO is not set in .env."
+    results["email"] = email_result
+
+    audit_logger.info(
+        "TEST_NOTIFY  user=%s  gchat=%s  email=%s",
+        username,
+        "ok" if results["gchat"].get("ok") else "fail",
+        "ok" if results["email"].get("ok") else "fail",
+    )
+    return jsonify(results)
 
 
 # ─── Chat session management ─────────────────────────────────────────────────────
@@ -2148,10 +2474,10 @@ def login_page():
             success, err = login_user(username, credential)
             if success:
                 audit_logger.info("LOGIN_SUCCESS  user=%s  ip=%s  mode=%s",
-                                  username, request.remote_addr, mode)
+                                  _sl(username), _sl(request.remote_addr), _sl(mode))
                 return redirect(_safe_redirect_url(next_url))
             audit_logger.warning("LOGIN_FAILED  user=%s  ip=%s  reason=%s",
-                                 username, request.remote_addr, err)
+                                 _sl(username), _sl(request.remote_addr), _sl(err))
             error = err or "Login failed. Check your credentials and try again."
     return render_template("login.html", error=error, username=username,
                            next=next_url, auth_mode=mode)
@@ -2237,7 +2563,7 @@ def admin_api_create_user():
         "active":        True,
     }
     save_users(db)
-    logger.info("Admin %r created user %r (role=%s)", current_user()["username"], username, role)
+    logger.info("Admin %r created user %r (role=%s)", current_user()["username"], username, _sl(role))
     return jsonify({"ok": True, "username": username}), 201
 
 
@@ -2392,8 +2718,8 @@ def api_job_detail(job_name: str):
     try:
         art_data  = jenkins_client.list_build_artifacts(job_name)
         artifacts = art_data.get("artifacts", [])
-    except Exception:
-        pass
+    except (OSError, ValueError, KeyError) as exc:
+        logger.debug("api_job_detail: could not fetch artifacts for %r: %s", job_name, exc)
 
     last_failure = None
     failed_builds = [b for b in builds if b["result"] in ("FAILURE", "UNSTABLE")]
@@ -2403,8 +2729,9 @@ def api_job_detail(job_name: str):
         try:
             log_data  = jenkins_client.get_console_log_tail(job_name, fb["number"], 20)
             log_lines = log_data.get("lines", [])
-        except Exception:
-            pass
+        except (OSError, ValueError, KeyError) as exc:
+            logger.debug("api_job_detail: could not fetch log for %r build %s: %s",
+                         job_name, fb["number"], exc)
         last_failure = {
             "build_number": fb["number"],
             "result":       fb["result"],
