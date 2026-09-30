@@ -1943,7 +1943,11 @@ def _run_build(
         failure_cause      = ""
         failure_suggestion = ""
         if not is_success and console_tail:
-            failure_cause, failure_suggestion = _diagnose_failure(console_tail, result["result"])
+            from services.llm_client import llm_analyze_build_failure
+            diag               = llm_analyze_build_failure(console_tail, result["result"])
+            failure_cause      = diag.get("cause", "")
+            failure_suggestion = diag.get("suggestion", "")
+            logger.info("Failure diagnosis [%s]: %s", diag.get("source", "?"), failure_cause)
 
         # ── Notifications ─────────────────────────────────────────────────────────
         notif_parts = _send_notifications(
